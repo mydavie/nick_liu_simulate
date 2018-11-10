@@ -5,6 +5,5 @@
 void tester(mongoc_gridfs_t *gridfs)
 {
     tester_initialization();
-    //vector_self_test (gridfs);
-    lun_paa_self_test (gridfs);
+    nand_operator_self_test (gridfs);
 }

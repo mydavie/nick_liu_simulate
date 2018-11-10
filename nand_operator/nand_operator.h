@@ -1,5 +1,6 @@
 #pragma once
 #include "../utility/types.h"
+#include "../utility/pool_mgr.h"
 #define KB_BITS                     4
 #define KB                          (1 << KB_BITS)
 //NAND cell type
@@ -24,6 +25,7 @@
 
 #define PAGE_SIZE                   (1UL << MAX_PAGE_SIZE_BITS)
 #define AU_SIZE                     (1UL << MAX_AU_BITS)
+#define PAGE_PER_PLANE              (1UL << MAX_CELL_BITS)
 #define AU_NR_PER_PAGE              (1UL << MAX_AU_PER_PAGE_BITS)
 #define MAX_CHANNEL_NR              (1UL << MAX_CH_BITS)
 #define MAX_CE_PER_CHANNEL          (1UL << MAX_CE_PER_CH_BITS)
@@ -36,7 +38,8 @@
 #define MAX_LLUN_NR                 (1UL << MAX_LLUN_NR_BITS)
 
 //the NAND layout physical address that used by ASIC, and transfered from PAA
-#define NAND_VECTOR_POOL_NR     (AU_NR_PER_PAGE * 3)      //NAND layout operator poll
+#define NAND_OPERATOR_POOL_NR   MAX_LLUN_NR
+#define NAND_VECTOR_POOL_NR     (NAND_OPERATOR_POOL_NR * (MAX_PLANE_PER_LUN * AU_NR_PER_PAGE))
 /*llun is the abbreviation of logical lun, plun is the abbreviation of physical lun.
  * llun is used by FTL(flash tanslation layer, manage the NAND), just a sequence ID.
  * plun is used by FCL(flash controller layer, operate NAND interface).
@@ -49,55 +52,74 @@
      ch2 ce0 lun0 -->  llun2
         ................
 */
-typedef union _nand_vector_t
+typedef struct _nand_vector_t
 {
-    uint64 value;
-    struct
+    pool_node_t *next;
+    void        *nand_operator;
+    union
     {
-        uint64 plane            : MAX_PLANE_PER_LUN_BITS;
-        uint64 block            : MAX_BLOCK_PER_PLANE_BITS;
-        uint64 page             : MAX_PAGE_PER_BLOCK_BITS;
-        uint64 au_off           : MAX_AU_PER_PAGE_BITS;
-        union
+        uint64 value;
+        struct
         {
-            struct
-            {
-                uint64 ch       : MAX_CH_BITS;
-                uint64 ce       : MAX_CE_PER_CH_BITS;
-                uint64 lun      : MAX_LUN_PER_CE_BITS;
-            } field;
-            uint64 value        : MAX_PLUN_NR_BITS;
-        } plun;
-        uint64 rsvd             : 64 - MAX_NAND_LAYOUT_BITS;
-    } field;
+           uint64 plane            : MAX_PLANE_PER_LUN_BITS;
+           uint64 block            : MAX_BLOCK_PER_PLANE_BITS;
+           uint64 page             : MAX_PAGE_PER_BLOCK_BITS;
+           uint64 au_off           : MAX_AU_PER_PAGE_BITS;
+           union
+           {
+               struct
+               {
+                   uint64 ch       : MAX_CH_BITS;
+                   uint64 ce       : MAX_CE_PER_CH_BITS;
+                   uint64 lun      : MAX_LUN_PER_CE_BITS;
+               } field;
+               uint64 value        : MAX_PLUN_NR_BITS;
+           } plun;
+           uint64 rsvd             : 64 - MAX_NAND_LAYOUT_BITS;
+        } field;
+    }info;
 }nand_vector_t;
+typedef struct _nand_vector_operator_t
+{
+    nand_vector_t*  list_start;
+    nand_vector_t   start;
+    uint16          cnt;
+}nand_vector_operator_t;
 
 //the NAND layout logical address that used FTL, and will be translated into nand_vector_t
-typedef union _lun_paa_t
+typedef union _nand_lun_paa_t
 {
     struct
     {
-        uint64 au_of_lun    :   (MAX_PLANE_PER_LUN_BITS + MAX_PAGE_PER_BLOCK_BITS + MAX_AU_PER_PAGE_BITS); //the internal au offset of one supper block
+        uint64 au_of_lun    :   (MAX_PLANE_PER_LUN_BITS + MAX_AU_PER_PAGE_BITS + MAX_CELL_BITS); //the internal au offset of one supper block
         uint64 llun         :   MAX_LLUN_NR_BITS;
         uint64 psb          :   MAX_BLOCK_PER_PLANE_BITS;       //the supper block id, that composed by the same physical block id in different plane.
         uint64 pb_type      :   1;
-        uint64 rsvd         :   (64 - MAX_NAND_LAYOUT_BITS);
+        uint64 rsvd         :   (64 - (MAX_PLANE_PER_LUN_BITS + MAX_AU_PER_PAGE_BITS + MAX_CELL_BITS) - 2 - MAX_LLUN_NR_BITS - MAX_BLOCK_PER_PLANE_BITS);
     }field;
     uint64 value;
-}lun_paa_t;
-
-typedef struct _nand_op_t
+}nand_lun_paa_t;
+typedef struct _lun_paa_operator_t
 {
-    char            *buf;                                   //the DRAM address that save user data
-    uint16          size;                                   //the user data size
-    uint16          op_cnt;
-    nand_vector_t   *vector_list;                           //the physical address of NAND that to save user data
-    struct
-    {
-        lun_paa_t   *list;
-        lun_paa_t   start;
-    }lun_paa;
-}nand_op_t;
+    nand_lun_paa_t  *list;
+    nand_lun_paa_t  start;
+    uint16          cnt;
+}lun_paa_operator_t;
+//NAND operator type
+#define OP_TYPE_READ_NORMAL     0
+#define OP_TYPE_PROGRAM_NORMAL  1
+
+typedef struct _nand_operator_t
+{
+    pool_node_t             *next;
+    char                    *buf;                                   //the DRAM address that save user data
+    uint16                  size;                                   //the user data size
+    uint16                  op_cnt;
+    uint16                  op_type;
+    uint16                  outstanding_vector_cnt;
+    lun_paa_operator_t      lun_paa_operator;
+    nand_vector_operator_t  vector_operator;
+}nand_operator_t;
 
 typedef struct _nand_info_t
 {
@@ -113,9 +135,18 @@ typedef struct _nand_info_t
     - MAX_BLOCK_PER_PLANE_BITS - MAX_PAGE_PER_BLOCK_BITS - MAX_AU_PER_PAGE_BITS - MAX_CELL_BITS- 8);
 }nand_info_t;
 
-uint32 read_nand_vectors(mongoc_gridfs_t *gridfs, nand_op_t *nand_op);
-uint32 write_nand_vectors(mongoc_gridfs_t *gridfs, nand_op_t *nand_op);
-uint32 lun_paa_list_to_nand_vectors(lun_paa_t *paa, nand_vector_t *nand_vector, uint32 cnt);
-uint32 lun_paa_range_to_nand_vectors(lun_paa_t *paa_start, nand_vector_t *nand_vector, uint32 cnt);
-void NAND_initialization(void);
+typedef struct _nand_mgr_t
+{
+    pool_mgr_t vector_pool_mgr;
+    pool_mgr_t operator_pool_mgr;
+}nand_mgr_t;
 
+uint32 read_nand_vectors(mongoc_gridfs_t *gridfs, nand_operator_t *nand_op);
+uint32 write_nand_vectors(mongoc_gridfs_t *gridfs, nand_operator_t *nand_op);
+uint32 lun_paa_list_to_nand_vectors(nand_operator_t *pnand_operator, uint32 cnt);
+uint32 lun_paa_range_to_nand_vectors(nand_operator_t *pnand_operator, uint32 cnt);
+nand_vector_t* nand_allcoate_vector(uint32 want_nr, uint32 *result_nr);
+nand_operator_t *nand_allcoate_operator(uint32 want_nr, uint32 *result_nr);
+void NAND_initialization(void);
+void nand_operator_submit(mongoc_gridfs_t *gridfs, nand_operator_t *pnand_operator);
+uint32 nand_release_vectors(nand_vector_t* start, uint32 vector_cnt);

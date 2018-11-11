@@ -1,3 +1,5 @@
+#include "nand_operator.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <fcntl.h>
@@ -10,6 +12,7 @@
 #include "../utility/types.h"
 #include "../utility/utility.h"
 #include "../utility/pool_mgr.h"
+#include "../simulator/mongodb_operator.h"
 #include "nand_operator.h"
 
 nand_vector_t l2p_lun_table[MAX_CHANNEL_NR + MAX_CE_PER_CHANNEL + MAX_LUN_PER_CE];
@@ -237,13 +240,15 @@ void NAND_initialization(void)
 
 uint32 write_nand_vectors(mongoc_gridfs_t *gridfs, nand_operator_t *nand_operator)
 {
-    bson_string_t *bson_string;
-    mongoc_gridfs_file_t *file;
-    mongoc_gridfs_file_opt_t opt = {0};
-    mongoc_iovec_t iov;
-    ssize_t r;
     nand_vector_t *cur;
     uint32 vector_cnt = nand_operator->vector_operator.cnt;
+    monogodb_operator_t mongodb_operator;
+
+   mongodb_operator.chunk_size    = AU_SIZE;
+   mongodb_operator.buf           = nand_operator->buf;
+   mongodb_operator.gridfs        = gridfs;
+
+
     if (nand_operator->vector_operator.list_start) {
         cur = nand_operator->vector_operator.list_start;
     }
@@ -253,35 +258,25 @@ uint32 write_nand_vectors(mongoc_gridfs_t *gridfs, nand_operator_t *nand_operato
     }
     printf("write vectors\n");
     for (uint32 i = 0; i < vector_cnt; i++) {
-      bson_string = bson_string_new (NULL);
-      bson_string_append_printf (bson_string, "%lx", cur->info.value);
-      opt.filename      = bson_string->str;
-      opt.chunk_size    = AU_SIZE;
-      file = mongoc_gridfs_create_file (gridfs, &opt);
-      assert(file);
-      iov.iov_base  = (void *) (nand_operator->buf + i * AU_SIZE);
-      iov.iov_len   = AU_SIZE;
-      memset(iov.iov_base, i, AU_SIZE);
-      memory_dump_dword("write", i, iov.iov_base, iov.iov_len >> 2);
-      r = mongoc_gridfs_file_writev (file, &iov, 1, -1);
-      bson_string_free (bson_string, true);
-      mongoc_gridfs_file_save(file);
-      cur = (nand_vector_t *)cur->next;
+        mongodb_operator.name          = cur->info.value;
+        mongodb_operator.buf_offset    = i;
+        mongodb_write_au(&mongodb_operator);
+        cur = (nand_vector_t *)cur->next;
     }
 
-    mongoc_gridfs_file_destroy (file);
     return true;
 }
 
 uint32 read_nand_vectors(mongoc_gridfs_t *gridfs, nand_operator_t *nand_operator)
 {
-    bson_string_t *bson_string;
-    mongoc_gridfs_file_t *file;
-    mongoc_gridfs_file_opt_t opt = {0};
-    mongoc_iovec_t iov;
-    ssize_t r;
     nand_vector_t *cur;
-    uint32 vector_cnt   = nand_operator->vector_operator.cnt;
+    uint32 vector_cnt               = nand_operator->vector_operator.cnt;
+    monogodb_operator_t mongodb_operator;
+
+    mongodb_operator.chunk_size    = AU_SIZE;
+    mongodb_operator.buf           = nand_operator->buf;
+    mongodb_operator.gridfs        = gridfs;
+
     if (nand_operator->vector_operator.list_start) {
         cur = nand_operator->vector_operator.list_start;
     }
@@ -290,22 +285,12 @@ uint32 read_nand_vectors(mongoc_gridfs_t *gridfs, nand_operator_t *nand_operator
     }
     printf("read vectors\n");
     for (uint32 i = 0; i < vector_cnt; i++) {
-      bson_string = bson_string_new (NULL);
-      bson_string_append_printf (bson_string, "%lx", cur->info.value);
-      opt.filename = bson_string->str;
-      opt.chunk_size = AU_SIZE;
-      file = mongoc_gridfs_create_file (gridfs, &opt);
-      assert(file);
-      iov.iov_base    = (void *) (nand_operator->buf + i * AU_SIZE);
-      iov.iov_len     = AU_SIZE;
-      memory_dump_dword("read", i, iov.iov_base, iov.iov_len >> 2);
-      r = mongoc_gridfs_file_writev (file, &iov, 1, -1);
-      bson_string_free (bson_string, true);
-      mongoc_gridfs_file_save(file);
-      cur = (nand_vector_t *)cur->next;
+        mongodb_operator.name          = cur->info.value;
+        mongodb_operator.buf_offset    = i;
+        mongodb_read_au(&mongodb_operator);
+        cur = (nand_vector_t *)cur->next;
     }
 
-    mongoc_gridfs_file_destroy (file);
     return true;
 }
 

@@ -15,7 +15,7 @@
 
 void nand_op_resource_alloc(nand_operator_t *pnand_operator)
 {
-    pnand_operator->buf = (char *)malloc(NAND_VECTOR_POOL_NR * AU_SIZE);
+    pnand_operator->buf = (uint8 *)malloc(NAND_VECTOR_POOL_NR * AU_SIZE);
 }
 
 void nand_op_resource_release(nand_operator_t *pnand_operator)

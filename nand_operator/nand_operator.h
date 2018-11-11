@@ -1,6 +1,7 @@
 #pragma once
 #include "../utility/types.h"
 #include "../utility/pool_mgr.h"
+#include <mongoc/mongoc.h>
 #define KB_BITS                     4
 #define KB                          (1 << KB_BITS)
 //NAND cell type
@@ -112,7 +113,7 @@ typedef struct _lun_paa_operator_t
 typedef struct _nand_operator_t
 {
     pool_node_t             *next;
-    char                    *buf;                                   //the DRAM address that save user data
+    uint8                   *buf;                                   //the DRAM address that save user data
     uint16                  size;                                   //the user data size
     uint16                  op_cnt;
     uint16                  op_type;

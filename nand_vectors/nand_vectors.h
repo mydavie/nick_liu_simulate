@@ -23,6 +23,7 @@
 #define MAX_NAND_LAYOUT_BITS          (MAX_AU_PER_PAGE_BITS + MAX_CH_BITS + MAX_CE_PER_CH_BITS + \
     MAX_LUN_PER_CE_BITS + MAX_PLANE_PER_LUN_BITS + MAX_BLOCK_PER_PLANE_BITS + MAX_PAGE_PER_BLOCK_BITS)
 #define MAX_NAND_LAYOUT_SIZE_BITS   (MAX_PLUN_NR_BITS + MAX_AU_BITS)
+#define MAX_AU_PER_LUN_BITS         (MAX_PLANE_PER_LUN_BITS + MAX_AU_PER_PAGE_BITS + MAX_CELL_BITS + MAX_PAGE_PER_BLOCK_BITS)
 
 #define PAGE_SIZE                   (1UL << MAX_PAGE_SIZE_BITS)
 #define AU_SIZE                     (1UL << MAX_AU_BITS)
@@ -56,7 +57,7 @@
 typedef struct _nand_vector_t
 {
     pool_node_t *next;
-    void        *nand_operator;
+    void        *logcial_lun;
     union
     {
         uint64 value;
@@ -79,6 +80,8 @@ typedef struct _nand_vector_t
            uint64 rsvd             : 64 - MAX_NAND_LAYOUT_BITS;
         } field;
     }info;
+    uint16 au_cnt;
+    void   *simulator_ptr;
 }nand_vector_t;
 typedef struct _nand_vector_operator_t
 {
@@ -87,40 +90,23 @@ typedef struct _nand_vector_operator_t
     uint16          cnt;
 }nand_vector_operator_t;
 
-//the NAND layout logical address that used FTL, and will be translated into nand_vector_t
-typedef union _nand_lun_paa_t
-{
-    struct
-    {
-        uint64 au_of_lun    :   (MAX_PLANE_PER_LUN_BITS + MAX_AU_PER_PAGE_BITS + MAX_CELL_BITS); //the internal au offset of one supper block
-        uint64 llun         :   MAX_LLUN_NR_BITS;
-        uint64 psb          :   MAX_BLOCK_PER_PLANE_BITS;       //the supper block id, that composed by the same physical block id in different plane.
-        uint64 pb_type      :   1;
-        uint64 rsvd         :   (64 - (MAX_PLANE_PER_LUN_BITS + MAX_AU_PER_PAGE_BITS + MAX_CELL_BITS) - 2 - MAX_LLUN_NR_BITS - MAX_BLOCK_PER_PLANE_BITS);
-    }field;
-    uint64 value;
-}nand_lun_paa_t;
-typedef struct _lun_paa_operator_t
-{
-    nand_lun_paa_t  *list;
-    nand_lun_paa_t  start;
-    uint16          cnt;
-}lun_paa_operator_t;
+
 //NAND operator type
 #define OP_TYPE_READ_NORMAL     0
 #define OP_TYPE_PROGRAM_NORMAL  1
 
-typedef struct _nand_operator_t
-{
-    pool_node_t             *next;
-    uint8                   *buf;                                   //the DRAM address that save user data
-    uint16                  size;                                   //the user data size
-    uint16                  op_cnt;
-    uint16                  op_type;
-    uint16                  outstanding_vector_cnt;
-    lun_paa_operator_t      lun_paa_operator;
-    nand_vector_operator_t  vector_operator;
-}nand_operator_t;
+//typedef struct _nand_operator_t
+//{
+//    pool_node_t             *next;
+//    uint8                   *buf;                                   //the DRAM address that save user data
+//    uint16                  size;                                   //the user data size
+//    uint16                  op_cnt;
+//    uint16                  op_type;
+//    uint16                  outstanding_vector_cnt;
+//    logcial_lun_operator_t  logical_lun_operator;
+//    nand_vector_operator_t  vector_operator;
+//    void                    *simulator_ptr;
+//}nand_operator_t;
 
 typedef struct _nand_info_t
 {
@@ -139,15 +125,13 @@ typedef struct _nand_info_t
 typedef struct _nand_mgr_t
 {
     pool_mgr_t vector_pool_mgr;
-    pool_mgr_t operator_pool_mgr;
+
 }nand_mgr_t;
 
-uint32 read_nand_vectors(mongoc_gridfs_t *gridfs, nand_operator_t *nand_op);
-uint32 write_nand_vectors(mongoc_gridfs_t *gridfs, nand_operator_t *nand_op);
-uint32 lun_paa_list_to_nand_vectors(nand_operator_t *pnand_operator, uint32 cnt);
-uint32 lun_paa_range_to_nand_vectors(nand_operator_t *pnand_operator, uint32 cnt);
-nand_vector_t* nand_allcoate_vector(uint32 want_nr, uint32 *result_nr);
-nand_operator_t *nand_allcoate_operator(uint32 want_nr, uint32 *result_nr);
 void NAND_initialization(void);
-void nand_operator_submit(mongoc_gridfs_t *gridfs, nand_operator_t *pnand_operator);
+uint32 write_nand_vector(nand_vector_t* pnand_vector, uint8 *buf);
+uint32 read_nand_vector(nand_vector_t* pnand_vector, uint8 *buf);
+nand_vector_t* nand_allcoate_vector(uint32 want_nr, uint32 *result_nr);
 uint32 nand_release_vectors(nand_vector_t* start, uint32 vector_cnt);
+nand_info_t * get_nand_info(void);
+

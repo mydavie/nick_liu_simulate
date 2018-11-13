@@ -54,6 +54,16 @@
      ch2 ce0 lun0 -->  llun2
         ................
 */
+typedef union _physical_lun_t
+{
+    struct {
+        uint32 ch       : MAX_CH_BITS;
+        uint32 ce       : MAX_CE_PER_CH_BITS;
+        uint32 lun      : MAX_LUN_PER_CE_BITS;
+    }field;
+    uint32 value;
+}physical_lun_t;
+
 typedef struct _nand_vector_t
 {
     pool_node_t *next;
@@ -63,21 +73,12 @@ typedef struct _nand_vector_t
         uint64 value;
         struct
         {
-           uint64 plane            : MAX_PLANE_PER_LUN_BITS;
-           uint64 block            : MAX_BLOCK_PER_PLANE_BITS;
-           uint64 page             : MAX_PAGE_PER_BLOCK_BITS;
-           uint64 au_off           : MAX_AU_PER_PAGE_BITS;
-           union
-           {
-               struct
-               {
-                   uint64 ch       : MAX_CH_BITS;
-                   uint64 ce       : MAX_CE_PER_CH_BITS;
-                   uint64 lun      : MAX_LUN_PER_CE_BITS;
-               } field;
-               uint64 value        : MAX_PLUN_NR_BITS;
-           } plun;
-           uint64 rsvd             : 64 - MAX_NAND_LAYOUT_BITS;
+           uint32 plane            : MAX_PLANE_PER_LUN_BITS;
+           uint32 block            : MAX_BLOCK_PER_PLANE_BITS;
+           uint32 page             : MAX_PAGE_PER_BLOCK_BITS;
+           uint32 au_off           : MAX_AU_PER_PAGE_BITS;
+           uint32 rsvd             : (32 - MAX_PLANE_PER_LUN_BITS - MAX_BLOCK_PER_PLANE_BITS - MAX_PAGE_PER_BLOCK_BITS - MAX_AU_PER_PAGE_BITS);
+           physical_lun_t plun;
         } field;
     }info;
     uint16 au_cnt;
@@ -128,7 +129,7 @@ typedef struct _nand_mgr_t
 
 }nand_mgr_t;
 
-void NAND_initialization(void);
+void nand_init_onetime(void);
 uint32 write_nand_vector(nand_vector_t* pnand_vector, uint8 *buf);
 uint32 read_nand_vector(nand_vector_t* pnand_vector, uint8 *buf);
 nand_vector_t* nand_allcoate_vector(uint32 want_nr, uint32 *result_nr);

@@ -44,9 +44,3 @@ void logical_lun_operator_self_test(mongoc_gridfs_t *gridfs)
         logical_lun_release(plogical_lun, result_nr);
     }
 }
-
-void tester_initialization(void)
-{
-    NAND_initialization();
-    logical_lun_pool_initialization();
-}

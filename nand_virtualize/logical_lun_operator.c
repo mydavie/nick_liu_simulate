@@ -14,24 +14,26 @@
 #include "../nand_vectors/nand_vectors.h"
 #include "logical_lun_operator.h"
 
-nand_vector_t l2p_lun_table[MAX_CHANNEL_NR + MAX_CE_PER_CHANNEL + MAX_LUN_PER_CE];
+physical_lun_t l2p_lun_table[MAX_LLUN_NR];
 
-uint64 logical_lun_to_physical_lun(uint32 logcial_lun_offset)
+uint32 logical_lun_to_physical_lun(uint32 logical_lun_offset)
 {
-    return l2p_lun_table[logcial_lun_offset].info.value;
+    return l2p_lun_table[logical_lun_offset].value;
 }
 
-uint32 l2p_lun_table_initialization(void)
+uint32 l2p_lun_table_init_onetime(void)
 {
     nand_info_t *pnand_info = get_nand_info();
     uint32 llun_nr          = pnand_info->ch_nr * pnand_info->ce_nr * pnand_info->lun_nr;
-    memset(l2p_lun_table, 0, sizeof (nand_vector_t) * (MAX_CHANNEL_NR + MAX_CE_PER_CHANNEL + MAX_LUN_PER_CE));
+    assert(llun_nr < MAX_LLUN_NR);
+
+    memset(l2p_lun_table, 0, sizeof (physical_lun_t) * MAX_LLUN_NR);
     uint32 ch_cnt = 0, ce_cnt = 0, lun_cnt = 0;
 
     for (uint32 i = 0; i < llun_nr; i++) {
-        l2p_lun_table[i].info.field.plun.field.ch   = ch_cnt;
-        l2p_lun_table[i].info.field.plun.field.ce   = ce_cnt;
-        l2p_lun_table[i].info.field.plun.field.lun  = lun_cnt;
+        l2p_lun_table[i].field.ch   = ch_cnt;
+        l2p_lun_table[i].field.ce   = ce_cnt;
+        l2p_lun_table[i].field.lun  = lun_cnt;
 
         if (ch_cnt == pnand_info->ch_nr - 1) {
             ch_cnt = 0;
@@ -52,9 +54,9 @@ uint32 l2p_lun_table_initialization(void)
             ch_cnt++;
         }
         printf("logical lun %d =>physical lun: [ ch %2x ce %2x lun %2x]\n",
-                i, l2p_lun_table[i].info.field.plun.field.ch,
-                l2p_lun_table[i].info.field.plun.field.ce,
-                l2p_lun_table[i].info.field.plun.field.lun);
+                i, l2p_lun_table[i].field.ch,
+                l2p_lun_table[i].field.ce,
+                l2p_lun_table[i].field.lun);
     }
     return true;
 }
@@ -247,15 +249,16 @@ uint32 submit_logical_lun_operator(logcial_lun_operator_t *plogcial_lun_operator
 }
 
 pool_mgr_t logical_lun_pool_mgr;
-void logical_lun_pool_initialization(void)
+void logical_lun_pool_init_onetime(void)
 {
     logical_lun_t *logical_lun_pool = (logical_lun_t *)malloc(MAX_LLUN_NR * sizeof(logical_lun_t));
-    pool_mgr("LOGICALLUN", &logical_lun_pool_mgr, sizeof (logical_lun_t), logical_lun_pool, 8);
+    pool_mgr("LOGICALLUN", &logical_lun_pool_mgr, sizeof (logical_lun_t), logical_lun_pool, MAX_LLUN_NR);
 }
 
 logical_lun_t* logical_lun_allcoate(uint32 want_nr, uint32 *result_nr)
 {
     logical_lun_t* plogical_lun = NULL;
+    assert(logical_lun_pool_mgr.node_sz = sizeof (logical_lun_t));
     plogical_lun = (logical_lun_t*)pool_allocate_nodes(&logical_lun_pool_mgr, result_nr, want_nr);
 
     return plogical_lun;
@@ -265,11 +268,16 @@ uint32 logical_lun_release(logical_lun_t* start, uint32 vector_cnt)
 {
     assert(vector_cnt);
     logical_lun_t *end = start + vector_cnt - 1;
+    assert(logical_lun_pool_mgr.node_sz = sizeof (logical_lun_t));
     pool_release_nodes(&logical_lun_pool_mgr, (pool_node_t *)start, (pool_node_t *)end);
     return true;
 }
 
-
+void logical_lun_init_onetime(void)
+{
+    logical_lun_pool_init_onetime();
+    l2p_lun_table_init_onetime();
+}
 
 
 

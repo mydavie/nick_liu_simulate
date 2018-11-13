@@ -27,6 +27,7 @@ main (int argc, char *argv[])
     mongoc_client_set_error_api (client, 2);
     gridfs = mongoc_client_get_gridfs (client, "test", "fs", &error);
     //add test case at following
+
     tester(gridfs);
     mongoc_gridfs_destroy (gridfs);
     mongoc_uri_destroy (uri);

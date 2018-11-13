@@ -46,7 +46,7 @@ typedef struct logcial_lun_operator_t
 uint32 submit_logical_lun_operator(logcial_lun_operator_t *plogcial_lun_operator);
 logical_lun_t* logical_lun_allcoate(uint32 want_nr, uint32 *result_nr);
 uint32 logical_lun_release(logical_lun_t* start, uint32 vector_cnt);
-uint32 l2p_lun_table_initialization(void);
-uint64 logical_lun_to_physical_lun(uint32 logcial_lun_offset);
+uint32 logical_lun_to_physical_lun(uint32 logical_lun_offset);
+void logical_lun_init_onetime(void);
 
 

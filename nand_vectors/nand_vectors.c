@@ -19,7 +19,7 @@ nand_info_t gnand_info;
 nand_mgr_t  gnand_mgr;
 
 //the info will get from NAND parameter page.
-uint32 nand_info_initialization(nand_info_t *pnand_info)
+uint32 nand_info_init_onetime(nand_info_t *pnand_info)
 {
     pnand_info->ch_nr           = 8;
     pnand_info->ce_nr           = 4;
@@ -46,7 +46,7 @@ nand_info_t * get_nand_info(void)
     return &gnand_info;
 }
 
-void nand_vector_pool_initialization(void)
+void nand_vector_pool_init_onetime(void)
 {
     nand_vector_t *nand_vector_pool = (nand_vector_t *)malloc(NAND_VECTOR_POOL_NR * sizeof(nand_vector_t));
     pool_mgr("NANDVECTOR", &gnand_mgr.vector_pool_mgr, sizeof (nand_vector_t), nand_vector_pool, 16);//NAND_VECTOR_POOL_NR
@@ -103,11 +103,10 @@ uint32 nand_release_vectors(nand_vector_t* start, uint32 vector_cnt)
 //    }
 //}
 
-void NAND_initialization(void)
+void nand_init_onetime(void)
 {
-    nand_info_initialization(&gnand_info);
-    nand_vector_pool_initialization();
-    l2p_lun_table_initialization();
+    nand_info_init_onetime(&gnand_info);
+    nand_vector_pool_init_onetime();
 }
 
 uint32 write_nand_vector(nand_vector_t* pnand_vector, uint8 *buf)

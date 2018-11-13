@@ -23,18 +23,18 @@ void logical_lun_operator_self_test(mongoc_gridfs_t *gridfs)
 
 
     if (want_nr == result_nr) {
-        logical_lun_operator.list           = plogical_lun;
-        logical_lun_operator.cnt            = result_nr;
-        logical_lun_operator.op_type        = LOGICAL_LUN_OP_TYPE_PROGRAM;
-        plogical_lun->param.range.au_start  = 5;
-        plogical_lun->param.range.au_nr     = 8;
-        plogical_lun->buf                   = (uint8 *)malloc(plogical_lun->param.range.au_nr * AU_SIZE);
+        logical_lun_operator.list               = plogical_lun;
+        logical_lun_operator.cnt                = result_nr;
+        logical_lun_operator.op_type            = LOGICAL_LUN_OP_TYPE_PROGRAM;
+        plogical_lun->au_param.range.au_start   = 5;
+        plogical_lun->au_param.range.au_cnt     = 8;
+        plogical_lun->buf                   = (uint8 *)malloc(plogical_lun->au_param.range.au_cnt * AU_SIZE);
         plogical_lun->llun_nand_type        = NATIVE_TYPE;
         plogical_lun->llun_offset           = 4;
         plogical_lun->llun_spb_id           = 34;
         plogical_lun->simulator_ptr         = gridfs;
-        plogical_lun->param_type            = LOGICAL_LUN_PARAM_RANGE;
 
+        plogical_lun->au_param_type         = LOGICAL_LUN_PARAM_RANGE;
         submit_logical_lun_operator(&logical_lun_operator);
         logical_lun_operator.op_type        = LOGICAL_LUN_OP_TYPE_READ;
         submit_logical_lun_operator(&logical_lun_operator);

@@ -2,7 +2,6 @@
 #include <stdlib.h>
 #include <fcntl.h>
 #include <bson.h>
-#include <stdio.h>
 #include <locale.h>
 #include <memory.h>
 #include <assert.h>
@@ -123,14 +122,15 @@ uint32 fill_nand_vectors(logical_lun_t *plogical_lun, nand_vector_t* pnand_vecto
     cur = pnand_vector;
     do {
         assert(cur);
-        printf("vector[%d]: psb %d au_of_lun %d nand_vector: ch %d ce %d lun %d plane %d block %d au_off %d\n",
+        printf("vector[%d]: psb %d au_of_lun %d nand_vector: ch %d ce %d lun %d plane %d block %d au_off %d cnt %d\n",
                 i, plogical_lun->llun_spb_id, plogical_lun->au_param.range.au_start ,
                 cur->info.field.plun.field.ch,
                 cur->info.field.plun.field.ce,
                 cur->info.field.plun.field.lun,
                 cur->info.field.plane,
                 cur->info.field.block,
-                cur->info.field.au_off);
+                cur->info.field.au_off,
+				cur->au_cnt);
         cur = (nand_vector_t *)cur->next;
         i++;
     } while(i < vector_cnt);

@@ -83,6 +83,7 @@ typedef struct _nand_vector_t
     }info;
     uint16 au_cnt;
     void   *simulator_ptr;
+    uint8  *buf;
 }nand_vector_t;
 typedef struct _nand_vector_operator_t
 {

@@ -67,6 +67,7 @@ uint32 fill_nand_vectors(logical_lun_t *plogical_lun, nand_vector_t* pnand_vecto
     uint32 au_nr_per_page           = pnand_info->au_nr;
     uint32 au_nr_per_plane          = (plogical_lun->llun_nand_type == SLC_OTF_TYPE) ? au_nr_per_page : (au_nr_per_page * pnand_info->cell_bits_nr);
     uint32 au_nr_per_plane_bits     = __builtin_ctz(au_nr_per_plane);
+    uint32 au_nr_per_lun_bits		= __builtin_ctz(au_nr_per_plane * pnand_info->plane_nr);
     nand_vector_t *cur              = pnand_vector;
     uint32 au_allocated_ptr         = plogical_lun->au_param.range.au_start;
     uint32 au_allocated_cnt         = plogical_lun->au_param.range.au_cnt;
@@ -82,8 +83,10 @@ uint32 fill_nand_vectors(logical_lun_t *plogical_lun, nand_vector_t* pnand_vecto
         cur->info.value         = logical_lun_to_physical_lun(plogical_lun->llun_offset);
         cur->info.field.block   = plogical_lun->llun_spb_id;
         cur->info.field.plane   = au_allocated_ptr >> au_nr_per_plane_bits;
+        cur->info.field.page	= au_allocated_ptr >> au_nr_per_lun_bits;
         cur->info.field.au_off  = au_allocated_ptr & (au_nr_per_page - 1);
         cur->au_cnt             = au_front_cnt;
+        cur->buf				= plogical_lun->buf;
         au_allocated_cnt        -= au_front_cnt;
         au_allocated_ptr        += au_front_cnt;
         cur = (nand_vector_t *)cur->next;
@@ -96,10 +99,13 @@ uint32 fill_nand_vectors(logical_lun_t *plogical_lun, nand_vector_t* pnand_vecto
         cur->info.value         = logical_lun_to_physical_lun(plogical_lun->llun_offset);
         cur->info.field.block   = plogical_lun->llun_spb_id;
         cur->info.field.plane   = au_allocated_ptr >> au_nr_per_plane_bits;
+        cur->info.field.page	= au_allocated_ptr >> au_nr_per_lun_bits;
         cur->info.field.au_off  = au_allocated_ptr & (au_nr_per_page - 1);
         cur->au_cnt             = AU_NR_PER_PAGE;
+        cur->buf				= plogical_lun->buf + au_allocated_ptr;
         au_allocated_cnt        -= AU_NR_PER_PAGE;
         au_allocated_ptr        += AU_NR_PER_PAGE;
+
         vector_cnt++;
         cur = (nand_vector_t *)cur->next;
     }
@@ -109,8 +115,10 @@ uint32 fill_nand_vectors(logical_lun_t *plogical_lun, nand_vector_t* pnand_vecto
         cur->info.value         = logical_lun_to_physical_lun(plogical_lun->llun_offset);
         cur->info.field.block   = plogical_lun->llun_spb_id;
         cur->info.field.plane   = au_allocated_ptr >> au_nr_per_plane_bits;
+        cur->info.field.page	= au_allocated_ptr >> au_nr_per_lun_bits;
         cur->info.field.au_off  = 0;
         cur->au_cnt             = au_allocated_cnt;
+        cur->buf				= plogical_lun->buf + au_allocated_ptr;
         au_allocated_ptr        += au_allocated_cnt;
         au_allocated_cnt        = 0;
         au_back_cnt++;
@@ -122,13 +130,14 @@ uint32 fill_nand_vectors(logical_lun_t *plogical_lun, nand_vector_t* pnand_vecto
     cur = pnand_vector;
     do {
         assert(cur);
-        printf("vector[%d]: psb %d au_of_lun %d nand_vector: ch %d ce %d lun %d plane %d block %d au_off %d cnt %d\n",
+        printf("vector[%d]: psb %d au_of_lun %d nand_vector: ch %d ce %d lun %d plane %d block %d page %d au_off %d cnt %d\n",
                 i, plogical_lun->llun_spb_id, plogical_lun->au_param.range.au_start ,
                 cur->info.field.plun.field.ch,
                 cur->info.field.plun.field.ce,
                 cur->info.field.plun.field.lun,
                 cur->info.field.plane,
                 cur->info.field.block,
+				cur->info.field.page,
                 cur->info.field.au_off,
 				cur->au_cnt);
         cur = (nand_vector_t *)cur->next;

@@ -11,6 +11,7 @@
 #include "../simulator/mongodb_operator.h"
 #include "../utility/utility.h"
 
+#define MONGO_DB_MK	0xFB
 void mongodb_write_au(monogodb_operator_t *poperator)
 {
     bson_string_t *bson_string;
@@ -63,22 +64,27 @@ void mongodb_read_au(monogodb_operator_t *poperator)
     memset(iov.iov_base, 0x55, iov.iov_len);
     memory_dump_u64("reset buffer : ", poperator->buf_offset, iov.iov_base, iov.iov_len >> 6);
     file = mongoc_gridfs_find_one_by_filename (poperator->gridfs, opt.filename, &error);
-    stream = mongoc_stream_gridfs_new (file);
-    assert (stream);
 
-    for (;;) {
-        r = mongoc_stream_readv (stream, &iov, 1, -1, 0);
+    if (file) {
+		stream = mongoc_stream_gridfs_new (file);
+		assert (stream);
 
-        assert (r >= 0);
-        if (r == 0) {
-           break;
-        }
-        else {
-            memory_dump_u64("read to buffer : ", poperator->buf_offset, iov.iov_base, iov.iov_len >> 6);
-        }
+		for (;;) {
+			r = mongoc_stream_readv (stream, &iov, 1, -1, 0);
+			assert (r >= 0);
+			if (r == 0) {
+			   break;
+			}
+			else {
+				memory_dump_u64("read to buffer : ", poperator->buf_offset, iov.iov_base, iov.iov_len >> 6);
+				assert( ((uint64*)iov.iov_base)[0] == poperator->name);
+			}
+		}
+		mongoc_stream_destroy (stream);
+		mongoc_gridfs_file_destroy (file);
     }
-    mongoc_stream_destroy (stream);
+
+
     bson_string_free (bson_string, true);
-    mongoc_gridfs_file_save(file);
-    mongoc_gridfs_file_destroy (file);
+
 }

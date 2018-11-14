@@ -119,10 +119,9 @@ uint32 write_nand_vector(nand_vector_t* pnand_vector, uint8 *buf)
 
 
     for (uint32 i = 0; i < pnand_vector->au_cnt; i++) {
-        pnand_vector->info.field.au_off += 1;
         mongodb_operator.name          	= pnand_vector->info.value;
         mongodb_operator.buf_offset    	= i;
-        printf("program nand vector %lx plun %d plane %d block %d page %d au_off %d buffer %x\n",
+        printf("program nand vector %16lx plun %d plane %d block %d page %d au_off %d buffer %x\n",
         		pnand_vector->info.value,
         		pnand_vector->info.field.plun.value,
 				pnand_vector->info.field.plane,
@@ -131,6 +130,7 @@ uint32 write_nand_vector(nand_vector_t* pnand_vector, uint8 *buf)
 				pnand_vector->info.field.au_off,
 				(uint32)(mongodb_operator.buf + i * AU_SIZE));
         mongodb_write_au(&mongodb_operator);
+        pnand_vector->info.field.au_off += 1;
     }
 
     return true;
@@ -145,10 +145,9 @@ uint32 read_nand_vector(nand_vector_t* pnand_vector, uint8 *buf)
     mongodb_operator.gridfs        = pnand_vector->simulator_ptr;
 
     for (uint32 i = 0; i < pnand_vector->au_cnt; i++) {
-    	pnand_vector->info.field.au_off += 1;
         mongodb_operator.name          	= pnand_vector->info.value;
         mongodb_operator.buf_offset    	= i;
-        printf("read nand vector %lx plun %d plane %d block %d page %d au_off %d buffer %x\n",
+        printf("read nand vector %16lx plun %d plane %d block %d page %d au_off %d buffer %x\n",
               		pnand_vector->info.value,
               		pnand_vector->info.field.plun.value,
       				pnand_vector->info.field.plane,
@@ -157,6 +156,7 @@ uint32 read_nand_vector(nand_vector_t* pnand_vector, uint8 *buf)
       				pnand_vector->info.field.au_off,
       				(uint32)(mongodb_operator.buf + i * AU_SIZE));
         mongodb_read_au(&mongodb_operator);
+        pnand_vector->info.field.au_off += 1;
     }
 
     return true;

@@ -28,11 +28,11 @@ void logical_lun_operator_self_test(mongoc_gridfs_t *gridfs)
         logical_lun_operator.op_type            = LOGICAL_LUN_OP_TYPE_PROGRAM;
         plogical_lun->au_param.range.au_start   = 5;
         plogical_lun->au_param.range.au_cnt     = 8;
-        plogical_lun->buf                   = align_memory_malloc(plogical_lun->au_param.range.au_cnt, 64);
-        plogical_lun->llun_nand_type        = NATIVE_TYPE;
-        plogical_lun->llun_offset           = 4;
-        plogical_lun->llun_spb_id           = 34;
-        plogical_lun->simulator_ptr         = gridfs;
+        plogical_lun->buf                   	= align_memory_malloc(plogical_lun->au_param.range.au_cnt * AU_SIZE, 64);
+        plogical_lun->llun_nand_type        	= NATIVE_TYPE;
+        plogical_lun->llun_offset           	= 4;
+        plogical_lun->llun_spb_id           	= 34;
+        plogical_lun->simulator_ptr         	= gridfs;
 
         plogical_lun->au_param_type         = LOGICAL_LUN_PARAM_RANGE;
         submit_logical_lun_operator(&logical_lun_operator);

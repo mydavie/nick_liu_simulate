@@ -16,17 +16,17 @@ typedef union _param_t
 }param_t;
 typedef struct _logical_lun_t
 {
+	pool_node_t 	*next;
     uint32          llun_offset          : MAX_LLUN_NR_BITS;
     uint32          llun_nand_type       : MAX_CELL_BITS;
     uint32          llun_spb_id          : MAX_BLOCK_PER_PLANE_BITS;
     uint32          rsvd1                : (32 - MAX_LLUN_NR_BITS - MAX_CELL_BITS - MAX_BLOCK_PER_PLANE_BITS);
     param_t         au_param;
     uint16          au_param_type;
-    struct _logical_lun_t *next;
     nand_vector_t   *nand_vector;
     uint16          vector_cnt;
-    uint8           *buf;
-    void            *simulator_ptr;
+    memory_node_t   *buf_node;;
+    mongoc_gridfs_t *gridfs;
 }logical_lun_t;
 
 #define LOGICAL_LUN_OP_TYPE_READ    0
@@ -36,11 +36,11 @@ typedef struct _logical_lun_t
 
 typedef struct logcial_lun_operator_t
 {
-    logical_lun_t  *list;
-    logical_lun_t  start;
-    uint16         cnt;
-    uint16         op_type;
-    void           *simulator_ptr;
+    logical_lun_t  		*list;
+    logical_lun_t  		start;
+    uint16         		cnt;
+    uint16         		op_type;
+    mongoc_gridfs_t 	*gridfs;
 }logcial_lun_operator_t;
 
 uint32 submit_logical_lun_operator(logcial_lun_operator_t *plogcial_lun_operator);

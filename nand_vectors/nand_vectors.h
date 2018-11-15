@@ -1,12 +1,13 @@
 #pragma once
-#include "../utility/types.h"
-#include "../utility/pool_mgr.h"
-#include <mongoc/mongoc.h>
+//#include "../utility/types.h"
+//#include "../utility/pool_mgr.h"
+//#include "../utility/memory_mgr.h"
+//#include <mongoc/mongoc.h>
 #define KB_BITS                     4
 #define KB                          (1 << KB_BITS)
 //NAND cell type
-#define SLC_OTF_TYPE    0
-#define NATIVE_TYPE     1
+#define SLC_OTF_TYPE    			0
+#define NATIVE_TYPE     			1
 //NAND physical layout bits limitation macro definition
 #define MAX_AU_BITS                 (2 + KB_BITS)
 #define MAX_CELL_BITS               2  // 4bits per cell
@@ -20,10 +21,10 @@
 #define MAX_PAGE_PER_BLOCK_BITS     14  //FW support max physical PAGE number per physical block
 #define MAX_PLUN_NR_BITS            (MAX_CH_BITS + MAX_CE_PER_CH_BITS + MAX_LUN_PER_CE_BITS)
 #define MAX_LLUN_NR_BITS            MAX_PLUN_NR_BITS
-#define MAX_NAND_LAYOUT_BITS          (MAX_AU_PER_PAGE_BITS + MAX_CH_BITS + MAX_CE_PER_CH_BITS + \
-    MAX_LUN_PER_CE_BITS + MAX_PLANE_PER_LUN_BITS + MAX_BLOCK_PER_PLANE_BITS + MAX_PAGE_PER_BLOCK_BITS)
 #define MAX_NAND_LAYOUT_SIZE_BITS   (MAX_PLUN_NR_BITS + MAX_AU_BITS)
-#define MAX_AU_PER_LUN_BITS         (MAX_PLANE_PER_LUN_BITS + MAX_AU_PER_PAGE_BITS + MAX_CELL_BITS + MAX_PAGE_PER_BLOCK_BITS)
+#define MAX_PLANE_PER_PARALEL_BITS	(MAX_CH_BITS + MAX_CE_PER_CH_BITS + MAX_LUN_PER_CE_BITS + MAX_PLANE_PER_LUN_BITS)
+#define MAX_AU_PER_PARALEL_BITS     (MAX_AU_PER_PAGE_BITS + MAX_CELL_BITS + MAX_PLANE_PER_PARALEL_BITS)
+#define MAX_AU_PER_LUN_BITS         (MAX_PLANE_PER_PARALEL_BITS + MAX_PAGE_PER_BLOCK_BITS)
 
 #define PAGE_SIZE                   (1UL << MAX_PAGE_SIZE_BITS)
 #define AU_SIZE                     (1UL << MAX_AU_BITS)
@@ -35,9 +36,9 @@
 #define MAX_PLANE_PER_LUN           (1UL << MAX_PLANE_PER_LUN_BITS)
 #define MAX_BLOCK_PER_PLANE         (1UL << MAX_BLOCK_PER_PLANE_BITS)
 #define MAX_PAGE_PER_BLOCK          (1UL << MAX_PAGE_PER_BLOCK_BITS)
-#define MAX_AU_PER_SUPERPB          MAX_NAND_LAYOUT_BITS
 #define MAX_PLUN_NR                 (1UL << MAX_PLUN_NR_BITS)
 #define MAX_LLUN_NR                 (1UL << MAX_LLUN_NR_BITS)
+#define MAX_AU_PER_PARALEL          (1UL << MAX_AU_PER_PARALEL_BITS)
 
 //the NAND layout physical address that used by ASIC, and transfered from PAA
 #define NAND_OPERATOR_POOL_NR   MAX_LLUN_NR
@@ -81,9 +82,9 @@ typedef struct _nand_vector_t
            physical_lun_t plun;
         } field;
     }info;
-    uint16 au_cnt;
-    void   *simulator_ptr;
-    uint8  *buf;
+    uint16 			au_cnt;
+    void   			*simulator_ptr;
+    memory_node_t 	*buf_node;
 }nand_vector_t;
 typedef struct _nand_vector_operator_t
 {
@@ -131,8 +132,8 @@ typedef struct _nand_mgr_t
 }nand_mgr_t;
 
 void nand_init_onetime(void);
-uint32 write_nand_vector(nand_vector_t* pnand_vector, uint8 *buf);
-uint32 read_nand_vector(nand_vector_t* pnand_vector, uint8 *buf);
+uint32 read_nand_vector(nand_vector_t* pnand_vector);
+uint32 write_nand_vector(nand_vector_t* pnand_vector);
 nand_vector_t* nand_allcoate_vector(uint32 want_nr, uint32 *result_nr);
 uint32 nand_release_vectors(nand_vector_t* start, uint32 vector_cnt);
 nand_info_t * get_nand_info(void);

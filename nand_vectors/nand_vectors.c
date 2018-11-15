@@ -1,19 +1,6 @@
-#include "../nand_vectors/nand_vectors.h"
-#include "../nand_vectors/nand_vectors.h"
-
-#include <stdio.h>
-#include <stdlib.h>
-#include <fcntl.h>
-#include <bson.h>
-#include <stdio.h>
-#include <locale.h>
-#include <memory.h>
-#include <assert.h>
-#include <mongoc/mongoc.h>
-#include "../utility/types.h"
-#include "../utility/utility.h"
-#include "../utility/pool_mgr.h"
+#include "../lib_header.h"
 #include "../simulator/mongodb_operator.h"
+#include "../nand_vectors/nand_vectors.h"
 
 nand_info_t gnand_info;
 nand_mgr_t  gnand_mgr;
@@ -48,60 +35,27 @@ nand_info_t * get_nand_info(void)
 
 void nand_vector_pool_init_onetime(void)
 {
-    nand_vector_t *nand_vector_pool = (nand_vector_t *)malloc(NAND_VECTOR_POOL_NR * sizeof(nand_vector_t));
-    pool_mgr("NANDVECTOR", &gnand_mgr.vector_pool_mgr, sizeof (nand_vector_t), nand_vector_pool, 16);//NAND_VECTOR_POOL_NR
-}
+    nand_vector_t *nand_vector_pool = align_memory_malloc(NAND_VECTOR_POOL_NR * sizeof(nand_vector_t), sizeof (uint64));
+    pool_mgr("NAND VECTOR", &gnand_mgr.vector_pool_mgr, sizeof (nand_vector_t), nand_vector_pool, 50);//NAND_VECTOR_POOL_NR
 
-//nand_operator_t *nand_allcoate_operator(uint32 want_nr, uint32 *result_nr)
-//{
-//    nand_operator_t   *pnand_operator;
-//    pnand_operator = (nand_operator_t*)pool_allocate_nodes(&gnand_mgr.vector_pool_mgr, result_nr, want_nr);
-//    return pnand_operator;
-//}
+}
 
 nand_vector_t* nand_allcoate_vector(uint32 want_nr, uint32 *result_nr)
 {
     nand_vector_t* pnand_vector = NULL;
+    assert(gnand_mgr.vector_pool_mgr.node_sz = sizeof (nand_vector_t));
     pnand_vector = (nand_vector_t*)pool_allocate_nodes(&gnand_mgr.vector_pool_mgr, result_nr, want_nr);
-
+    memset(((uint8*)pnand_vector + sizeof (pool_node_t)), 0, gnand_mgr.vector_pool_mgr.node_sz - sizeof (pool_node_t));
     return pnand_vector;
 }
 
 uint32 nand_release_vectors(nand_vector_t* start, uint32 vector_cnt)
 {
     assert(vector_cnt);
-    nand_vector_t *end = start + vector_cnt - 1;
-    pool_release_nodes(&gnand_mgr.vector_pool_mgr, (pool_node_t *)start, (pool_node_t *)end);
+    assert(start);
+    pool_release_nodes(&gnand_mgr.vector_pool_mgr, (pool_node_t *)start, vector_cnt);
     return true;
 }
-
-//
-//void nand_operator_submit(mongoc_gridfs_t *gridfs, nand_operator_t *pnand_operator)
-//{
-//    uint32 lun_laa_cnt  = pnand_operator->logical_lun_operator.cnt;
-//    uint32 need_vector_nrs  = 0;
-//    //how many nand_vector need to be calculated in here.
-//    //TODO
-//    need_vector_nrs = lun_laa_cnt;
-//    //then to allocate vectors.
-//    logcial_lun_t *plogical_lun_list = pnand_operator->logical_lun_operator.list;
-//    uint32 cnt = pnand_operator->logical_lun_operator.cnt;
-//
-//    if (plogical_lun_list)
-//    {
-//        logical_lun_list_to_vectors(plogical_lun_list, cnt);
-//    }
-//    else {
-//        logical_lun_to_vectors(&pnand_operator->logical_lun_operator.start);
-//    }
-//
-//    if (pnand_operator->op_type == OP_TYPE_READ_NORMAL) {
-//        //read_nand_vectors(gridfs, pnand_operator);
-//    }
-//    else if (pnand_operator->op_type == OP_TYPE_PROGRAM_NORMAL) {
-//        //write_nand_vectors(gridfs, pnand_operator);
-//    }
-//}
 
 void nand_init_onetime(void)
 {
@@ -109,56 +63,67 @@ void nand_init_onetime(void)
     nand_vector_pool_init_onetime();
 }
 
-uint32 write_nand_vector(nand_vector_t* pnand_vector, uint8 *buf)
+
+uint32 write_nand_vector(nand_vector_t* pnand_vector)
 {
     monogodb_operator_t mongodb_operator;
-
-    mongodb_operator.chunk_size    = AU_SIZE;
-    mongodb_operator.buf           = buf;
-    mongodb_operator.gridfs        = pnand_vector->simulator_ptr;
-
+    nand_vector_t  cur;
+    memory_node_t *pbuf_node        = pnand_vector->buf_node;
+    cur.info.value 					= pnand_vector->info.value;
+    mongodb_operator.chunk_size		= AU_SIZE;
+    mongodb_operator.gridfs			= pnand_vector->simulator_ptr;
 
     for (uint32 i = 0; i < pnand_vector->au_cnt; i++) {
-        mongodb_operator.name          	= pnand_vector->info.value;
-        mongodb_operator.buf_offset    	= i;
-        printf("program nand vector %16lx plun %d plane %d block %d page %d au_off %d buffer %x\n",
-        		pnand_vector->info.value,
-        		pnand_vector->info.field.plun.value,
-				pnand_vector->info.field.plane,
-				pnand_vector->info.field.block,
-				pnand_vector->info.field.page,
-				pnand_vector->info.field.au_off,
-				(uint32)(mongodb_operator.buf + i * AU_SIZE));
+        mongodb_operator.name          	= cur.info.value;
+        mongodb_operator.buf			= pbuf_node->buf;
+        mongodb_operator.buf_offset     = 0;
+        assert(pbuf_node->buf);
+        printf("program nand vector %16lx plun %d plane %d block %d page %d au_off %d buffer %lx\n",
+        		cur.info.value,
+				cur.info.field.plun.value,
+				cur.info.field.plane,
+				cur.info.field.block,
+				cur.info.field.page,
+				cur.info.field.au_off,
+				(uint64)(mongodb_operator.buf));
         mongodb_write_au(&mongodb_operator);
-        pnand_vector->info.field.au_off += 1;
+        assert(cur.info.field.au_off < AU_NR_PER_PAGE);
+        cur.info.field.au_off += 1;
+        pbuf_node = (memory_node_t*)pbuf_node->next;
     }
+    assert(mongodb_operator.buf_offset < AU_NR_PER_PAGE);
 
     return true;
 }
 
-uint32 read_nand_vector(nand_vector_t* pnand_vector, uint8 *buf)
+uint32 read_nand_vector(nand_vector_t* pnand_vector)
 {
     monogodb_operator_t mongodb_operator;
-
-    mongodb_operator.chunk_size    = AU_SIZE;
-    mongodb_operator.buf           = buf;
-    mongodb_operator.gridfs        = pnand_vector->simulator_ptr;
+    nand_vector_t  cur;
+    memory_node_t *pbuf_node        = pnand_vector->buf_node;
+	cur.info.value 					= pnand_vector->info.value;
+    mongodb_operator.chunk_size		= AU_SIZE;
+    mongodb_operator.gridfs			= pnand_vector->simulator_ptr;
 
     for (uint32 i = 0; i < pnand_vector->au_cnt; i++) {
-        mongodb_operator.name          	= pnand_vector->info.value;
-        mongodb_operator.buf_offset    	= i;
-        printf("read nand vector %16lx plun %d plane %d block %d page %d au_off %d buffer %x\n",
-              		pnand_vector->info.value,
-              		pnand_vector->info.field.plun.value,
-      				pnand_vector->info.field.plane,
-      				pnand_vector->info.field.block,
-      				pnand_vector->info.field.page,
-      				pnand_vector->info.field.au_off,
-      				(uint32)(mongodb_operator.buf + i * AU_SIZE));
+        mongodb_operator.name          	= cur.info.value;
+        mongodb_operator.buf			= pbuf_node->buf;
+        mongodb_operator.buf_offset     = 0;
+        assert(pbuf_node->buf);
+        printf("read nand vector: %16lx >> plun %d plane %d block %d page %d au_off %d buffer %lx\n",
+        			cur.info.value,
+					cur.info.field.plun.value,
+					cur.info.field.plane,
+					cur.info.field.block,
+					cur.info.field.page,
+					cur.info.field.au_off,
+      				(uint64)(mongodb_operator.buf));
         mongodb_read_au(&mongodb_operator);
-        pnand_vector->info.field.au_off += 1;
+        assert(cur.info.field.au_off < AU_NR_PER_PAGE);
+        cur.info.field.au_off += 1;
+        pbuf_node = (memory_node_t*)pbuf_node->next;
     }
-
+    assert(mongodb_operator.buf_offset < AU_NR_PER_PAGE);
     return true;
 }
 

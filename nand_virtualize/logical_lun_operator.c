@@ -1,15 +1,4 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <fcntl.h>
-#include <bson.h>
-#include <locale.h>
-#include <memory.h>
-#include <assert.h>
-#include <mongoc/mongoc.h>
-#include "../utility/types.h"
-#include "../utility/utility.h"
-#include "../utility/pool_mgr.h"
-#include "../simulator/mongodb_operator.h"
+#include "../lib_header.h"
 #include "../nand_vectors/nand_vectors.h"
 #include "logical_lun_operator.h"
 
@@ -74,7 +63,9 @@ uint32 fill_nand_vectors(logical_lun_t *plogical_lun, nand_vector_t* pnand_vecto
     uint32 au_of_start              = au_allocated_ptr & (AU_NR_PER_PAGE - 1);
     uint32 au_front_cnt             = 0;
     uint32 vector_cnt               = 0;
-    uint32 au_back_cnt              = 0;
+    uint32 buf_offset				= 0;
+    memory_node_t *pbuf_node 		= plogical_lun->buf_node;
+
     //to split one au range of current logical lun to different plane based(this will modified based on the ASIC design)
     if (au_of_start) {
         cur->logcial_lun = plogical_lun;
@@ -83,15 +74,17 @@ uint32 fill_nand_vectors(logical_lun_t *plogical_lun, nand_vector_t* pnand_vecto
         cur->info.value         = logical_lun_to_physical_lun(plogical_lun->llun_offset);
         cur->info.field.block   = plogical_lun->llun_spb_id;
         cur->info.field.plane   = au_allocated_ptr >> au_nr_per_plane_bits;
-        cur->info.field.page	= au_allocated_ptr >> au_nr_per_lun_bits;
+        cur->info.field.page	= au_allocated_ptr / au_nr_per_lun_bits;
         cur->info.field.au_off  = au_allocated_ptr & (au_nr_per_page - 1);
         cur->au_cnt             = au_front_cnt;
-        cur->buf				= plogical_lun->buf;
+        cur->buf_node			= pbuf_node;
         au_allocated_cnt        -= au_front_cnt;
         au_allocated_ptr        += au_front_cnt;
+        buf_offset				+= au_front_cnt * AU_SIZE;
         cur = (nand_vector_t *)cur->next;
+        pbuf_node = find_next_node_segment(pbuf_node, au_front_cnt);
         vector_cnt++;
-      }
+	}
     while (au_allocated_cnt && (au_allocated_cnt > AU_NR_PER_PAGE)) {
 
         cur->logcial_lun = plogical_lun;
@@ -99,13 +92,14 @@ uint32 fill_nand_vectors(logical_lun_t *plogical_lun, nand_vector_t* pnand_vecto
         cur->info.value         = logical_lun_to_physical_lun(plogical_lun->llun_offset);
         cur->info.field.block   = plogical_lun->llun_spb_id;
         cur->info.field.plane   = au_allocated_ptr >> au_nr_per_plane_bits;
-        cur->info.field.page	= au_allocated_ptr >> au_nr_per_lun_bits;
+        cur->info.field.page	= au_allocated_ptr / au_nr_per_lun_bits;
         cur->info.field.au_off  = au_allocated_ptr & (au_nr_per_page - 1);
         cur->au_cnt             = AU_NR_PER_PAGE;
-        cur->buf				= plogical_lun->buf + au_allocated_ptr;
+        cur->buf_node		    = pbuf_node;
         au_allocated_cnt        -= AU_NR_PER_PAGE;
         au_allocated_ptr        += AU_NR_PER_PAGE;
-
+        buf_offset				+= AU_NR_PER_PAGE * AU_SIZE;
+        pbuf_node = find_next_node_segment(pbuf_node, AU_NR_PER_PAGE);
         vector_cnt++;
         cur = (nand_vector_t *)cur->next;
     }
@@ -115,13 +109,13 @@ uint32 fill_nand_vectors(logical_lun_t *plogical_lun, nand_vector_t* pnand_vecto
         cur->info.value         = logical_lun_to_physical_lun(plogical_lun->llun_offset);
         cur->info.field.block   = plogical_lun->llun_spb_id;
         cur->info.field.plane   = au_allocated_ptr >> au_nr_per_plane_bits;
-        cur->info.field.page	= au_allocated_ptr >> au_nr_per_lun_bits;
+        cur->info.field.page	= au_allocated_ptr / au_nr_per_lun_bits;
         cur->info.field.au_off  = 0;
         cur->au_cnt             = au_allocated_cnt;
-        cur->buf				= plogical_lun->buf + au_allocated_ptr;
+        cur->buf_node		    = pbuf_node;
         au_allocated_ptr        += au_allocated_cnt;
         au_allocated_cnt        = 0;
-        au_back_cnt++;
+
         vector_cnt++;
     }
     assert(au_allocated_cnt == 0);
@@ -199,14 +193,12 @@ uint32 write_logical_lun(logical_lun_t *plogical_lun)
 {
     nand_vector_t *cur      = plogical_lun->nand_vector;
     uint32 vector_cnt       = plogical_lun->vector_cnt;
-    mongoc_gridfs_t *gridfs = plogical_lun->simulator_ptr;
-    uint8* buf              = plogical_lun->buf;
+    mongoc_gridfs_t *gridfs = plogical_lun->gridfs;
 
     for (uint32 i = 0; i < vector_cnt; i++) {
         cur->simulator_ptr = gridfs;
-        write_nand_vector(cur, buf);
+        write_nand_vector(cur);
         cur = (nand_vector_t *)cur->next;
-        buf += cur->au_cnt * AU_SIZE;
     }
     return true;
 }
@@ -215,24 +207,21 @@ uint32 read_logical_lun(logical_lun_t *plogical_lun)
 {
     nand_vector_t *cur      = plogical_lun->nand_vector;
     uint32 vector_cnt       = plogical_lun->vector_cnt;
-    mongoc_gridfs_t *gridfs = plogical_lun->simulator_ptr;
-    uint8* buf              = plogical_lun->buf;
+    mongoc_gridfs_t *gridfs = plogical_lun->gridfs;
 
     for (uint32 i = 0; i < vector_cnt; i++) {
         cur->simulator_ptr = gridfs;
-        read_nand_vector(cur, buf);
+        read_nand_vector(cur);
         cur = (nand_vector_t *)cur->next;
-        buf += cur->au_cnt * AU_SIZE;
     }
     return true;
 }
 
 uint32 submit_logical_lun_operator(logcial_lun_operator_t *plogcial_lun_operator)
 {
-    uint32 logical_lun_cnt              = plogcial_lun_operator->cnt;
-    logical_lun_t *cur                  = plogcial_lun_operator->list;
-    mongoc_gridfs_t *gridfs             = plogcial_lun_operator->simulator_ptr;
-
+    uint32 logical_lun_cnt	= plogcial_lun_operator->cnt;
+    logical_lun_t *cur		= plogcial_lun_operator->list;
+    mongoc_gridfs_t *gridfs	= plogcial_lun_operator->gridfs;
     if (cur)
     {
         logical_lun_list_to_vectors(cur, logical_lun_cnt);
@@ -246,7 +235,7 @@ uint32 submit_logical_lun_operator(logcial_lun_operator_t *plogcial_lun_operator
         assert(logical_lun_cnt == 1);
     }
     for (uint32 i = 0; i < logical_lun_cnt; i++) {
-        cur->simulator_ptr = gridfs;
+        cur->gridfs = gridfs;
         if (plogcial_lun_operator->op_type == LOGICAL_LUN_OP_TYPE_PROGRAM) {
             write_logical_lun(cur);
         }
@@ -261,7 +250,7 @@ pool_mgr_t logical_lun_pool_mgr;
 void logical_lun_pool_init_onetime(void)
 {
     logical_lun_t *logical_lun_pool = (logical_lun_t *)malloc(MAX_LLUN_NR * sizeof(logical_lun_t));
-    pool_mgr("LOGICALLUN", &logical_lun_pool_mgr, sizeof (logical_lun_t), logical_lun_pool, MAX_LLUN_NR);
+    pool_mgr("LOGICALLUN", &logical_lun_pool_mgr, sizeof (logical_lun_t), logical_lun_pool, 10);
 }
 
 logical_lun_t* logical_lun_allcoate(uint32 want_nr, uint32 *result_nr)
@@ -269,16 +258,15 @@ logical_lun_t* logical_lun_allcoate(uint32 want_nr, uint32 *result_nr)
     logical_lun_t* plogical_lun = NULL;
     assert(logical_lun_pool_mgr.node_sz = sizeof (logical_lun_t));
     plogical_lun = (logical_lun_t*)pool_allocate_nodes(&logical_lun_pool_mgr, result_nr, want_nr);
-
+    memset(((uint8*)plogical_lun + sizeof (pool_node_t)), 0, logical_lun_pool_mgr.node_sz - sizeof (pool_node_t));
     return plogical_lun;
 }
 
 uint32 logical_lun_release(logical_lun_t* start, uint32 vector_cnt)
 {
     assert(vector_cnt);
-    logical_lun_t *end = start + vector_cnt - 1;
     assert(logical_lun_pool_mgr.node_sz = sizeof (logical_lun_t));
-    pool_release_nodes(&logical_lun_pool_mgr, (pool_node_t *)start, (pool_node_t *)end);
+    pool_release_nodes(&logical_lun_pool_mgr, (pool_node_t *)start, vector_cnt);
     return true;
 }
 

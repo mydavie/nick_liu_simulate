@@ -25,7 +25,7 @@ main (int argc, char *argv[])
     client = mongoc_client_new_from_uri (uri);
     assert (client);
     mongoc_client_set_error_api (client, 2);
-    gridfs = mongoc_client_get_gridfs (client, "test", "fs", &error);
+    gridfs = mongoc_client_get_gridfs (client, "ssd1", "fs", &error);
     //add test case at following
 
     tester(gridfs);

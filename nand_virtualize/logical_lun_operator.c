@@ -49,73 +49,71 @@ uint32 l2p_lun_table_init_onetime(void)
     return true;
 }
 
+
 uint32 fill_nand_vectors(logical_lun_t *plogical_lun, nand_vector_t* pnand_vector)
 {
     uint32 i                        = 0;
     nand_info_t *pnand_info         = get_nand_info();
-    uint32 au_nr_per_page           = pnand_info->au_nr;
-    uint32 au_nr_per_plane          = (plogical_lun->llun_nand_type == SLC_OTF_TYPE) ? au_nr_per_page : (au_nr_per_page * pnand_info->cell_bits_nr);
-    uint32 au_nr_per_plane_bits     = __builtin_ctz(au_nr_per_plane);
-    uint32 au_nr_per_lun_bits		= __builtin_ctz(au_nr_per_plane * pnand_info->plane_nr);
+    uint32 au_nr_per_page_width     = pnand_info->au_nr_per_page_width;
     nand_vector_t *cur              = pnand_vector;
     uint32 au_allocated_ptr         = plogical_lun->au_param.range.au_start;
     uint32 au_allocated_cnt         = plogical_lun->au_param.range.au_cnt;
     uint32 au_of_start              = au_allocated_ptr & (AU_NR_PER_PAGE - 1);
     uint32 au_front_cnt             = 0;
     uint32 vector_cnt               = 0;
-    uint32 buf_offset				= 0;
-    memory_node_t *pbuf_node 		= plogical_lun->buf_node;
+    uint32 buf_offset               = 0;
+    memory_node_t *pbuf_node        = plogical_lun->buf_node;
+    uint32 au_nr_per_plane_width    = (plogical_lun->llun_nand_type == SLC_OTF_TYPE) ? au_nr_per_page_width : (au_nr_per_page_width * pnand_info->bits_nr_per_cell);
 
     //to split one au range of current logical lun to different plane based(this will modified based on the ASIC design)
     if (au_of_start) {
         cur->logcial_lun = plogical_lun;
         au_front_cnt = (au_allocated_cnt <= AU_NR_PER_PAGE - au_of_start) ? au_allocated_cnt : (AU_NR_PER_PAGE - au_of_start);
         assert(cur);
-        cur->info.value         = logical_lun_to_physical_lun(plogical_lun->llun_offset);
-        cur->info.field.block   = plogical_lun->llun_spb_id;
-        cur->info.field.plane   = au_allocated_ptr >> au_nr_per_plane_bits;
-        cur->info.field.page	= au_allocated_ptr / au_nr_per_lun_bits;
-        cur->info.field.au_off  = au_allocated_ptr & (au_nr_per_page - 1);
-        cur->au_cnt             = au_front_cnt;
-        cur->buf_node			= pbuf_node;
-        au_allocated_cnt        -= au_front_cnt;
-        au_allocated_ptr        += au_front_cnt;
-        buf_offset				+= au_front_cnt * AU_SIZE;
-        cur = (nand_vector_t *)cur->next;
-        pbuf_node = find_next_node_segment(pbuf_node, au_front_cnt);
+        cur->vector.phy_lun.value              = logical_lun_to_physical_lun(plogical_lun->logical_lun_id);
+        cur->vector.phy_lun_ptr.field.block    = plogical_lun->llun_spb_id;
+        cur->vector.phy_lun_ptr.field.plane    = au_allocated_ptr / au_nr_per_plane_width;
+        cur->vector.phy_lun_ptr.field.page	   = au_allocated_ptr % au_nr_per_plane_width;
+        cur->vector.phy_lun_ptr.field.au_off   = au_allocated_ptr & (au_nr_per_page_width - 1);
+        cur->au_cnt                     = au_front_cnt;
+        cur->buf_node                   = pbuf_node;
+        au_allocated_cnt                -= au_front_cnt;
+        au_allocated_ptr                += au_front_cnt;
+        buf_offset                      += au_front_cnt * AU_SIZE;
+        cur         = (nand_vector_t *)cur->next;
+        pbuf_node   = find_next_node_segment(pbuf_node, au_front_cnt);
         vector_cnt++;
-	}
+    }
     while (au_allocated_cnt && (au_allocated_cnt > AU_NR_PER_PAGE)) {
 
         cur->logcial_lun = plogical_lun;
         assert(cur);
-        cur->info.value         = logical_lun_to_physical_lun(plogical_lun->llun_offset);
-        cur->info.field.block   = plogical_lun->llun_spb_id;
-        cur->info.field.plane   = au_allocated_ptr >> au_nr_per_plane_bits;
-        cur->info.field.page	= au_allocated_ptr / au_nr_per_lun_bits;
-        cur->info.field.au_off  = au_allocated_ptr & (au_nr_per_page - 1);
-        cur->au_cnt             = AU_NR_PER_PAGE;
-        cur->buf_node		    = pbuf_node;
-        au_allocated_cnt        -= AU_NR_PER_PAGE;
-        au_allocated_ptr        += AU_NR_PER_PAGE;
-        buf_offset				+= AU_NR_PER_PAGE * AU_SIZE;
-        pbuf_node = find_next_node_segment(pbuf_node, AU_NR_PER_PAGE);
+        cur->vector.phy_lun.value              = logical_lun_to_physical_lun(plogical_lun->logical_lun_id);
+        cur->vector.phy_lun_ptr.field.block    = plogical_lun->llun_spb_id;
+        cur->vector.phy_lun_ptr.field.plane    = au_allocated_ptr / au_nr_per_plane_width;
+        cur->vector.phy_lun_ptr.field.page     = au_allocated_ptr % au_nr_per_plane_width;
+        cur->vector.phy_lun_ptr.field.au_off   = au_allocated_ptr & (au_nr_per_page_width - 1);
+        cur->au_cnt                     = AU_NR_PER_PAGE;
+        cur->buf_node                   = pbuf_node;
+        au_allocated_cnt                -= AU_NR_PER_PAGE;
+        au_allocated_ptr                += AU_NR_PER_PAGE;
+        buf_offset                      += AU_NR_PER_PAGE * AU_SIZE;
+        cur         = (nand_vector_t *)cur->next;
+        pbuf_node   = find_next_node_segment(pbuf_node, AU_NR_PER_PAGE);
         vector_cnt++;
-        cur = (nand_vector_t *)cur->next;
     }
     if (au_allocated_cnt) {
         cur->logcial_lun = plogical_lun;
         assert(cur);
-        cur->info.value         = logical_lun_to_physical_lun(plogical_lun->llun_offset);
-        cur->info.field.block   = plogical_lun->llun_spb_id;
-        cur->info.field.plane   = au_allocated_ptr >> au_nr_per_plane_bits;
-        cur->info.field.page	= au_allocated_ptr / au_nr_per_lun_bits;
-        cur->info.field.au_off  = 0;
-        cur->au_cnt             = au_allocated_cnt;
-        cur->buf_node		    = pbuf_node;
-        au_allocated_ptr        += au_allocated_cnt;
-        au_allocated_cnt        = 0;
-
+        cur->vector.phy_lun.value              = logical_lun_to_physical_lun(plogical_lun->logical_lun_id);
+        cur->vector.phy_lun_ptr.field.block    = plogical_lun->llun_spb_id;
+        cur->vector.phy_lun_ptr.field.plane    = au_allocated_ptr / au_nr_per_plane_width;
+        cur->vector.phy_lun_ptr.field.page     = au_allocated_ptr % au_nr_per_plane_width;
+        cur->vector.phy_lun_ptr.field.au_off   = 0;
+        cur->au_cnt                     = au_allocated_cnt;
+        cur->buf_node                   = pbuf_node;
+        au_allocated_ptr                += au_allocated_cnt;
+        au_allocated_cnt                = 0;
         vector_cnt++;
     }
     assert(au_allocated_cnt == 0);
@@ -126,14 +124,14 @@ uint32 fill_nand_vectors(logical_lun_t *plogical_lun, nand_vector_t* pnand_vecto
         assert(cur);
         printf("vector[%d]: psb %d au_of_lun %d nand_vector: ch %d ce %d lun %d plane %d block %d page %d au_off %d cnt %d\n",
                 i, plogical_lun->llun_spb_id, plogical_lun->au_param.range.au_start ,
-                cur->info.field.plun.field.ch,
-                cur->info.field.plun.field.ce,
-                cur->info.field.plun.field.lun,
-                cur->info.field.plane,
-                cur->info.field.block,
-				cur->info.field.page,
-                cur->info.field.au_off,
-				cur->au_cnt);
+                cur->vector.phy_lun.field.ch,
+                cur->vector.phy_lun.field.ce,
+                cur->vector.phy_lun.field.lun,
+                cur->vector.phy_lun_ptr.field.plane,
+                cur->vector.phy_lun_ptr.field.block,
+                cur->vector.phy_lun_ptr.field.page,
+                cur->vector.phy_lun_ptr.field.au_off,
+                cur->au_cnt);
         cur = (nand_vector_t *)cur->next;
         i++;
     } while(i < vector_cnt);
@@ -253,7 +251,7 @@ void logical_lun_pool_init_onetime(void)
     pool_mgr("LOGICALLUN", &logical_lun_pool_mgr, sizeof (logical_lun_t), logical_lun_pool, 10);
 }
 
-logical_lun_t* logical_lun_allcoate(uint32 want_nr, uint32 *result_nr)
+logical_lun_t* logical_lun_allocate(uint32 want_nr, uint32 *result_nr)
 {
     logical_lun_t* plogical_lun = NULL;
     assert(logical_lun_pool_mgr.node_sz = sizeof (logical_lun_t));
@@ -275,8 +273,3 @@ void logical_lun_init_onetime(void)
     logical_lun_pool_init_onetime();
     l2p_lun_table_init_onetime();
 }
-
-
-
-
-

@@ -5,8 +5,9 @@ typedef union _param_t
 {
     struct _range_t
     {
-        uint16 au_start;
-        uint16 au_cnt;
+        uint16 au_start[MAX_PLANE_PER_LUN];
+        uint16 au_cnt[MAX_PLANE_PER_LUN];
+        uint16 range_cnt;
     }range;
     struct _list_t
     {
@@ -17,7 +18,7 @@ typedef union _param_t
 typedef struct _logical_lun_t
 {
 	pool_node_t 	*next;
-    uint32          llun_offset          : MAX_LLUN_NR_BITS;
+    uint32          logical_lun_id       : MAX_LLUN_NR_BITS;
     uint32          llun_nand_type       : MAX_CELL_BITS;
     uint32          llun_spb_id          : MAX_BLOCK_PER_PLANE_BITS;
     uint32          rsvd1                : (32 - MAX_LLUN_NR_BITS - MAX_CELL_BITS - MAX_BLOCK_PER_PLANE_BITS);
@@ -44,7 +45,7 @@ typedef struct logcial_lun_operator_t
 }logcial_lun_operator_t;
 
 uint32 submit_logical_lun_operator(logcial_lun_operator_t *plogcial_lun_operator);
-logical_lun_t* logical_lun_allcoate(uint32 want_nr, uint32 *result_nr);
+logical_lun_t* logical_lun_allocate(uint32 want_nr, uint32 *result_nr);
 uint32 logical_lun_release(logical_lun_t* start, uint32 vector_cnt);
 uint32 logical_lun_to_physical_lun(uint32 logical_lun_offset);
 void logical_lun_init_onetime(void);

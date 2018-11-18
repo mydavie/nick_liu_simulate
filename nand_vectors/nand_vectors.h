@@ -13,8 +13,8 @@
 #define MAX_CELL_BITS               2  // 4bits per cell
 #define MAX_PAGE_SIZE_BITS          (4 + KB_BITS)   //FW support max au offset per physical page
 #define MAX_AU_PER_PAGE_BITS        (MAX_PAGE_SIZE_BITS - MAX_AU_BITS)
-#define MAX_CH_BITS                 4   //FW support max physical CHANNEL number
-#define MAX_CE_PER_CH_BITS          4   //FW support max physical CE number
+#define MAX_CH_BITS                 3   //FW support max physical CHANNEL number
+#define MAX_CE_PER_CH_BITS          2   //FW support max physical CE number
 #define MAX_LUN_PER_CE_BITS         2   //FW support max physical LUN number per physical ce
 #define MAX_PLANE_PER_LUN_BITS      2   //FW support max physical PLANE number per physical lun
 #define MAX_BLOCK_PER_PLANE_BITS    10  //FW support max physical BLOCK number per physical plane
@@ -39,6 +39,7 @@
 #define MAX_PLUN_NR                 (1UL << MAX_PLUN_NR_BITS)
 #define MAX_LLUN_NR                 (1UL << MAX_LLUN_NR_BITS)
 #define MAX_AU_PER_PARALEL          (1UL << MAX_AU_PER_PARALEL_BITS)
+#define MAX_AU_PER_LUN              (1UL << MAX_AU_PER_LUN_BITS)
 
 //the NAND layout physical address that used by ASIC, and transfered from PAA
 #define NAND_OPERATOR_POOL_NR   MAX_LLUN_NR
@@ -65,26 +66,32 @@ typedef union _physical_lun_t
     uint32 value;
 }physical_lun_t;
 
+typedef union _physical_lun_ptr_t
+{
+    struct {
+    uint32 plane            : MAX_PLANE_PER_LUN_BITS;
+    uint32 block            : MAX_BLOCK_PER_PLANE_BITS;
+    uint32 page             : MAX_PAGE_PER_BLOCK_BITS;
+    uint32 au_off           : MAX_AU_PER_PAGE_BITS;
+    uint32 rsvd             : (32 - MAX_PLANE_PER_LUN_BITS - MAX_BLOCK_PER_PLANE_BITS - MAX_PAGE_PER_BLOCK_BITS - MAX_AU_PER_PAGE_BITS);
+    }field;
+    uint32 value;
+}physical_lun_ptr_t;
+
+typedef struct _vector_t
+{
+    physical_lun_ptr_t  phy_lun_ptr;
+    physical_lun_t      phy_lun;
+}vector_t;
+
 typedef struct _nand_vector_t
 {
-    pool_node_t *next;
-    void        *logcial_lun;
-    union
-    {
-        uint64 value;
-        struct
-        {
-           uint32 plane            : MAX_PLANE_PER_LUN_BITS;
-           uint32 block            : MAX_BLOCK_PER_PLANE_BITS;
-           uint32 page             : MAX_PAGE_PER_BLOCK_BITS;
-           uint32 au_off           : MAX_AU_PER_PAGE_BITS;
-           uint32 rsvd             : (32 - MAX_PLANE_PER_LUN_BITS - MAX_BLOCK_PER_PLANE_BITS - MAX_PAGE_PER_BLOCK_BITS - MAX_AU_PER_PAGE_BITS);
-           physical_lun_t plun;
-        } field;
-    }info;
-    uint16 			au_cnt;
-    void   			*simulator_ptr;
-    memory_node_t 	*buf_node;
+    pool_node_t         *next;
+    void                *logcial_lun;
+    vector_t            vector;
+    uint16              au_cnt;
+    void                *simulator_ptr;
+    memory_node_t       *buf_node;
 }nand_vector_t;
 typedef struct _nand_vector_operator_t
 {
@@ -113,16 +120,24 @@ typedef struct _nand_vector_operator_t
 
 typedef struct _nand_info_t
 {
-    uint64 ch_nr        : MAX_CH_BITS + 1;
-    uint64 ce_nr        : MAX_CE_PER_CH_BITS + 1;
-    uint64 lun_nr       : MAX_LUN_PER_CE_BITS + 1;
-    uint64 plane_nr     : MAX_PLANE_PER_LUN_BITS + 1;
-    uint64 block_nr     : MAX_BLOCK_PER_PLANE_BITS + 1;
-    uint64 page_nr      : MAX_PAGE_PER_BLOCK_BITS + 1;
-    uint64 au_nr        : MAX_AU_PER_PAGE_BITS + 1;
-    uint64 cell_bits_nr : MAX_CELL_BITS + 1;
-    uint64 rsvd         : (64 - MAX_CH_BITS - MAX_CE_PER_CH_BITS - MAX_LUN_PER_CE_BITS - MAX_PLANE_PER_LUN_BITS \
+    uint64 ch_nr                : MAX_CH_BITS + 1;
+    uint64 ce_nr                : MAX_CE_PER_CH_BITS + 1;
+    uint64 lun_nr               : MAX_LUN_PER_CE_BITS + 1;
+    uint64 plane_nr_per_lun     : MAX_PLANE_PER_LUN_BITS + 1;
+    uint64 block_nr_per_plane   : MAX_BLOCK_PER_PLANE_BITS + 1;
+    uint64 page_nr_per_block    : MAX_PAGE_PER_BLOCK_BITS + 1;
+    uint64 au_nr_per_page_width : MAX_AU_PER_PAGE_BITS + 1;
+    uint64 bits_nr_per_cell     : MAX_CELL_BITS + 1;
+    uint64 rsvd                 : (64 - MAX_CH_BITS - MAX_CE_PER_CH_BITS - MAX_LUN_PER_CE_BITS - MAX_PLANE_PER_LUN_BITS \
     - MAX_BLOCK_PER_PLANE_BITS - MAX_PAGE_PER_BLOCK_BITS - MAX_AU_PER_PAGE_BITS - MAX_CELL_BITS- 8);
+    uint32 au_nr_per_slc_lun;
+    uint32 au_nr_per_slc_plane;
+    uint8  au_nr_per_slc_plane_width;
+    uint8  au_nr_per_slc_lun_width;
+    uint8  au_nr_per_xlc_plane_width;
+    uint8  au_nr_per_xlc_lun_width;
+    uint32 au_nr_per_xlc_lun;
+    uint32 au_nr_per_xlc_plane;
 }nand_info_t;
 
 typedef struct _nand_mgr_t

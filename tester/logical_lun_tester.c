@@ -9,7 +9,7 @@ void logical_lun_operator_self_test(mongoc_gridfs_t *gridfs)
     logcial_lun_operator_t logical_lun_operator;
     uint32 want_nr = 1;
     uint32 result_nr = 0;
-    logical_lun_t* plogical_lun = logical_lun_allcoate(want_nr, &result_nr);
+    logical_lun_t* plogical_lun = logical_lun_allocate(want_nr, &result_nr);
     logical_lun_operator.gridfs = gridfs;
 
     if (want_nr == result_nr) {
@@ -21,7 +21,7 @@ void logical_lun_operator_self_test(mongoc_gridfs_t *gridfs)
         plogical_lun->buf_node                  = memory_allcoate_nodes(plogical_lun->au_param.range.au_cnt, &result_nr);
         assert(plogical_lun->au_param.range.au_cnt == result_nr);
         plogical_lun->llun_nand_type        	= NATIVE_TYPE;
-        plogical_lun->llun_offset           	= 4;
+        plogical_lun->logical_lun_id           	= 4;
         plogical_lun->llun_spb_id           	= 34;
         plogical_lun->gridfs         			= gridfs;
         plogical_lun->au_param_type         	= LOGICAL_LUN_PARAM_RANGE;

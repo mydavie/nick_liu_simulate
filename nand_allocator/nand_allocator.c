@@ -58,7 +58,7 @@ typedef struct _logical_lun_reader_t
     paa_t                   paa_ptr[MAX_LLUN_NR];
     uint64                  laa_start;
     uint16                  laa_cnt;
-    logcial_lun_operator_t  logcial_lun_operator;
+    logical_lun_operator_t  logcial_lun_operator;
     lut_t                   *plut;
 }logical_lun_reader_t;
 
@@ -67,7 +67,8 @@ typedef struct _logcial_lun_writer_t
     paa_t   paa_ptr[MAX_LLUN_NR];
     uint64  laa_start;
     uint16  laa_cnt;
-    logcial_lun_operator_t logcial_lun_operator;
+    uint16  current_logical_lun_id;
+    logical_lun_operator_t logcial_lun_operator;
 }logical_lun_writer_t;
 
 void update_lut_by_logical_lun(lut_t *lut, logical_lun_t *plogical_lun, uint32 laa)
@@ -85,23 +86,23 @@ void update_lut_by_logical_lun(lut_t *lut, logical_lun_t *plogical_lun, uint32 l
     }
 }
 
-void insert_logical_lun_to_operator(logcial_lun_operator_t *plogcial_lun_operator,  logical_lun_t *plogical_lun_insert)
+void insert_logical_lun_to_operator(logical_lun_operator_t *plogcial_lun_operator,  logical_lun_t *plogical_lun_insert)
 {
     logical_lun_t *plogical_lun = plogcial_lun_operator->list;
     if (plogcial_lun_operator->cnt == 0) {
         plogcial_lun_operator->list = plogical_lun;
     }
     else {
-        for (uint32 i = 0; i < plogcial_lun_operator->cnt; i++) {
+        for (uint32 i = 0; i < plogcial_lun_operator->cnt - 1; i++) {
            plogical_lun = (logical_lun_t *)plogical_lun->next;
         }
-        ((logical_lun_t *)plogical_lun)->next = plogical_lun_insert;
+        plogical_lun->next = (pool_node_t*)plogical_lun_insert;
     }
     plogcial_lun_operator->cnt++;
 }
 
 //if the find cost time, then will be managed by like RB tree.
-logical_lun_t * find_logical_lun_from_operator(logcial_lun_operator_t *plogcial_lun_operator, uint32 logical_lun_id)
+logical_lun_t * find_logical_lun_from_operator(logical_lun_operator_t *plogcial_lun_operator, uint32 logical_lun_id)
 {
     logical_lun_t *plogical_lun = plogcial_lun_operator->list;
     if (plogical_lun == NULL) {
@@ -158,14 +159,20 @@ void laa_range_write(logical_lun_writer_t *logical_lun_writer)
 {
     uint32 got_nr;
     uint32 want_nr = logical_lun_writer->laa_cnt;
-    spb_info_t* pspb_info = get_spb_info(logical_lun_writer->paa_ptr.spb_id);
+    uint32 cur_llun_id = logical_lun_writer->current_logical_lun_id;
 
     //laa range translate into logical lun list, and translate to different none busy lun to best the performance later.
     do {
-        logical_lun_t *plogical_lun = nand_spb_allocate(&logical_lun_writer->paa_ptr[logical_lun_writer->paa_ptr.logical_lun_id], want_nr, &got_nr);
-        insert_logical_lun_operator(&logical_lun_writer->logcial_lun_operator, plogical_lun);
-        logical_lun_writer->paa_ptr.logical_lun_id++;
+        logical_lun_t *plogical_lun = nand_spb_allocate(&logical_lun_writer->paa_ptr[cur_llun_id], want_nr, &got_nr);
+        insert_logical_lun_to_operator(&logical_lun_writer->logcial_lun_operator, plogical_lun);
+        //the following is sequential allocate. and the random allocate will find the idle lun to serve the allocator.
+        cur_llun_id++;
+        if (cur_llun_id == MAX_LLUN_NR) {
+            cur_llun_id = 0;
+        }
+        want_nr -= got_nr;
     } while (want_nr);
+    logical_lun_writer->current_logical_lun_id = cur_llun_id;
 }
 
 /*any range laa, it should be split into different logical lun, either sequential or scatter.
@@ -173,42 +180,64 @@ void laa_range_write(logical_lun_writer_t *logical_lun_writer)
  * logical lun and no plane conflict, this will make nand vector do decision to do multiple plane read. but parse more laa will
  * cost more resource. and allocated resource fail case will handle later.
  */
+#define UPDATE_TO_CURRENT_AUS_SLOT  0
+#define UPDATE_TO_NEXT_AUS_SLOT     1
+#define UPDATE_TO_NEW_LOGICAL_LUN   2
+
+void record_paa_to_logical_lun(logical_lun_operator_t *plogical_lun_operator, logical_lun_t* plogical_lun, paa_t paa, uint32 type)
+{
+    uint32 result_nr;
+    switch (type)
+    {
+        case UPDATE_TO_CURRENT_AUS_SLOT:
+            plogical_lun->au_param.range.au_cnt[plogical_lun->au_param.range.range_cnt]++;
+            break;
+        case UPDATE_TO_NEXT_AUS_SLOT:
+            plogical_lun->au_param.range.range_cnt++;
+            plogical_lun->au_param.range.au_start[plogical_lun->au_param.range.range_cnt] = paa.au_ptr_of_lun;
+            plogical_lun->au_param.range.au_cnt[plogical_lun->au_param.range.range_cnt]++;
+            break;
+        case UPDATE_TO_NEW_LOGICAL_LUN:
+            plogical_lun = find_logical_lun_from_operator(plogical_lun_operator, paa.logical_lun_id);
+            if (plogical_lun == NULL) {
+              plogical_lun = logical_lun_allocate(1, &result_nr);
+              insert_logical_lun_to_operator(plogical_lun_operator, plogical_lun);
+              assert(result_nr == 1);
+            }
+            plogical_lun->au_param.range.au_start[plogical_lun->au_param.range.range_cnt] = paa.au_ptr_of_lun;
+            plogical_lun->au_param.range.au_cnt[plogical_lun->au_param.range.range_cnt]++;
+            plogical_lun->au_param.range.range_cnt++;
+            break;
+        default:
+            break;
+    }
+}
+
 void laa_range_read(logical_lun_reader_t *logical_lun_reader){
     uint64 laa                  =  logical_lun_reader->laa_start;
     paa_t paa                   = logical_lun_reader->plut->paa[laa];;
     paa_t cur_paa;
-    uint32 result_nr;
-    logical_lun_t* plogical_lun;
-    logcial_lun_operator_t logcial_lun_operator;
-    plogical_lun = logical_lun_allocate(1, &result_nr);
+    logical_lun_operator_t logical_lun_operator;
+    logical_lun_t logical_lun;
+
     //the paa do not placed into it's dedicated plane position, due to sequential laa maybe translated to conflict paa.
-    plogical_lun->au_param.range.au_start[plogical_lun->au_param.range.range_cnt] = paa.au_ptr_of_lun;
-    plogical_lun->au_param.range.au_cnt[plogical_lun->au_param.range.range_cnt]   = 1;
-    plogical_lun->au_param.range.range_cnt++;
-    insert_logical_lun_to_operator(&logcial_lun_operator, plogical_lun);
+    record_paa_to_logical_lun(&logical_lun_operator, &logical_lun, paa, UPDATE_TO_NEW_LOGICAL_LUN);
     for (uint32 i = 0; i < logical_lun_reader->laa_cnt; i++) {
         cur_paa = logical_lun_reader->plut->paa[laa + i];
         if (cur_paa.logical_lun_id == paa.logical_lun_id) {
             //if the next paa is in the same logical lun, then reuse the same logical lun context.
             if (cur_paa.au_ptr_of_lun == paa.au_ptr_of_lun + 1) {
                 //the sequential laa to get sequential paa
-                plogical_lun->au_param.range.au_cnt[plogical_lun->au_param.range.range_cnt]++;
+                record_paa_to_logical_lun(&logical_lun_operator, &logical_lun, paa, UPDATE_TO_CURRENT_AUS_SLOT);
             }
             else {
                 //place the non-sequential paa to another slot, it maybe in same plane or another plane of the same lun
-                plogical_lun->au_param.range.range_cnt++;
-                plogical_lun->au_param.range.au_start[plogical_lun->au_param.range.range_cnt] = paa.au_ptr_of_lun;
-                plogical_lun->au_param.range.au_cnt[plogical_lun->au_param.range.range_cnt]   = 1;
+                record_paa_to_logical_lun(&logical_lun_operator, &logical_lun, paa, UPDATE_TO_NEXT_AUS_SLOT);
             }
         }
         else {
             //find previous or allocate another new logical lun context to serve the scattered paa.
-            plogical_lun = find_logical_lun_from_operator(&logcial_lun_operator, paa.logical_lun_id);
-            if (plogical_lun == NULL) {
-                plogical_lun = logical_lun_allocate(1, &result_nr);
-            }
-            plogical_lun->au_param.range.au_start[plogical_lun->au_param.range.range_cnt] = paa.au_ptr_of_lun;
-            plogical_lun->au_param.range.range_cnt++;
+            record_paa_to_logical_lun(&logical_lun_operator, &logical_lun, paa, UPDATE_TO_NEW_LOGICAL_LUN);
         }
     }
 }
@@ -216,7 +245,7 @@ void laa_range_read(logical_lun_reader_t *logical_lun_reader){
 void test(void)
 {
     logical_lun_reader_t logical_lun_reader;
-    logical_lun_reader->plut = &user_lut;
+    logical_lun_reader.plut = &user_lut;
 }
 //
 //logical_lun_t *nand_spb_sequential_allocate_logical_lun(spb_ptr_t *spb_ptr, uint32 want_au_nr, uint32 got_au_nr)

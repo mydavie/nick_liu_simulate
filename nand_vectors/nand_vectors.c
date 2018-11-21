@@ -48,7 +48,6 @@ void nand_vector_pool_init_onetime(void)
 {
     nand_vector_t *nand_vector_pool = align_memory_malloc(NAND_VECTOR_POOL_NR * sizeof(nand_vector_t), sizeof (uint64));
     pool_mgr("NAND VECTOR", &gnand_mgr.vector_pool_mgr, sizeof (nand_vector_t), nand_vector_pool, 50);//NAND_VECTOR_POOL_NR
-
 }
 
 nand_vector_t* nand_allcoate_vector(uint32 want_nr, uint32 *result_nr)

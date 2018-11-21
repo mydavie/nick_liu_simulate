@@ -26,8 +26,10 @@ typedef struct _logical_lun_t
     uint16          au_param_type;
     nand_vector_t   *nand_vector;
     uint16          vector_cnt;
-    memory_node_t   *buf_node;;
+    memory_node_t   *buf_node;
     mongoc_gridfs_t *gridfs;
+    uint8           outstanding_au_rang_cnt;//make how many au range had been translated into vecotrs
+    uint8           valid_au_range_cnt;//make how many au range consist in this logical lun.
 }logical_lun_t;
 
 #define LOGICAL_LUN_OP_TYPE_READ    0
@@ -42,9 +44,9 @@ typedef struct logcial_lun_operator_t
     uint16         		cnt;
     uint16         		op_type;
     mongoc_gridfs_t 	*gridfs;
-}logcial_lun_operator_t;
+}logical_lun_operator_t;
 
-uint32 submit_logical_lun_operator(logcial_lun_operator_t *plogcial_lun_operator);
+uint32 submit_logical_lun_operator(logical_lun_operator_t *plogical_lun_operator);
 logical_lun_t* logical_lun_allocate(uint32 want_nr, uint32 *result_nr);
 uint32 logical_lun_release(logical_lun_t* start, uint32 vector_cnt);
 uint32 logical_lun_to_physical_lun(uint32 logical_lun_offset);

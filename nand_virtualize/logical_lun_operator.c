@@ -56,8 +56,8 @@ uint32 fill_nand_vectors(logical_lun_t *plogical_lun, nand_vector_t* pnand_vecto
     nand_info_t *pnand_info         = get_nand_info();
     uint32 au_nr_per_page_width     = pnand_info->au_nr_per_page_width;
     nand_vector_t *cur              = pnand_vector;
-    uint32 au_allocated_ptr         = plogical_lun->au_param.range.au_start;
-    uint32 au_allocated_cnt         = plogical_lun->au_param.range.au_cnt;
+    uint32 au_allocated_ptr         = plogical_lun->au_param.range.au_start[plogical_lun->outstanding_au_rang_cnt];
+    uint32 au_allocated_cnt         = plogical_lun->au_param.range.au_cnt[plogical_lun->outstanding_au_rang_cnt];
     uint32 au_of_start              = au_allocated_ptr & (AU_NR_PER_PAGE - 1);
     uint32 au_front_cnt             = 0;
     uint32 vector_cnt               = 0;
@@ -117,13 +117,14 @@ uint32 fill_nand_vectors(logical_lun_t *plogical_lun, nand_vector_t* pnand_vecto
         vector_cnt++;
     }
     assert(au_allocated_cnt == 0);
-    assert(au_allocated_ptr == plogical_lun->au_param.range.au_start + plogical_lun->au_param.range.au_cnt);
+    assert(au_allocated_ptr == plogical_lun->au_param.range.au_start[plogical_lun->outstanding_au_rang_cnt]
+    + plogical_lun->au_param.range.au_cnt[plogical_lun->outstanding_au_rang_cnt]);
     //dump info
     cur = pnand_vector;
     do {
         assert(cur);
         printf("vector[%d]: psb %d au_of_lun %d nand_vector: ch %d ce %d lun %d plane %d block %d page %d au_off %d cnt %d\n",
-                i, plogical_lun->llun_spb_id, plogical_lun->au_param.range.au_start ,
+                i, plogical_lun->llun_spb_id, plogical_lun->au_param.range.au_start[plogical_lun->outstanding_au_rang_cnt],
                 cur->vector.phy_lun.field.ch,
                 cur->vector.phy_lun.field.ce,
                 cur->vector.phy_lun.field.lun,
@@ -139,10 +140,10 @@ uint32 fill_nand_vectors(logical_lun_t *plogical_lun, nand_vector_t* pnand_vecto
     return vector_cnt;
 }
 
-void logical_lun_to_vectors(logical_lun_t *plogical_lun)
+uint32 logical_lun_to_vectors(logical_lun_t *plogical_lun)
 {
-    uint32 au_cnt                   = plogical_lun->au_param.range.au_cnt;
-    uint32 au_start                 = plogical_lun->au_param.range.au_start;
+    uint32 au_cnt                   = plogical_lun->au_param.range.au_cnt[plogical_lun->outstanding_au_rang_cnt];
+    uint32 au_start                 = plogical_lun->au_param.range.au_start[plogical_lun->outstanding_au_rang_cnt];
     uint32 vector_cnt               = 0;
     uint32 au_of_start              = au_start & (AU_NR_PER_PAGE - 1);
     uint32 au_front_cnt             = 0;
@@ -150,6 +151,9 @@ void logical_lun_to_vectors(logical_lun_t *plogical_lun)
     uint32 au_back_cnt              = 0;
     uint32 got_vectors_nr           = 0;
     nand_vector_t* pnand_vector     = NULL;
+    if (au_cnt == 0) {
+        return 0;
+    }
 
     if (au_of_start) {
         vector_cnt++;
@@ -168,21 +172,30 @@ void logical_lun_to_vectors(logical_lun_t *plogical_lun)
     pnand_vector = nand_allcoate_vector(vector_cnt, &got_vectors_nr);
     if (vector_cnt != got_vectors_nr) {
         nand_release_vectors(pnand_vector, got_vectors_nr);
+        return 0;
     }
     else {
         plogical_lun->nand_vector = pnand_vector;
         plogical_lun->vector_cnt  = vector_cnt;
         assert(got_vectors_nr == fill_nand_vectors(plogical_lun, pnand_vector));
+        plogical_lun->outstanding_au_rang_cnt++;
+        return got_vectors_nr;
     }
 }
 
 void logical_lun_list_to_vectors(logical_lun_t *plogical_lun, uint32 logical_lun_list_cnt)
 {
     logical_lun_t *cur = plogical_lun;
-    uint32 i = 0;
-
+    uint32 i = 0, j = 0;
+    //the following is sync translate, but it will support async at last.
     do {
-        logical_lun_to_vectors(cur);
+        do {
+            uint32 vector_cnt = 0;
+            vector_cnt = logical_lun_to_vectors(cur);
+            if (vector_cnt) {
+                j++;
+            }
+        } while (j < cur->valid_au_range_cnt);
         i++;
     } while (i < logical_lun_list_cnt);
 }
@@ -215,7 +228,7 @@ uint32 read_logical_lun(logical_lun_t *plogical_lun)
     return true;
 }
 
-uint32 submit_logical_lun_operator(logcial_lun_operator_t *plogcial_lun_operator)
+uint32 submit_logical_lun_operator(logical_lun_operator_t *plogcial_lun_operator)
 {
     uint32 logical_lun_cnt	= plogcial_lun_operator->cnt;
     logical_lun_t *cur		= plogcial_lun_operator->list;

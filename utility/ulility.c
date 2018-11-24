@@ -27,9 +27,9 @@ uint8 *align_memory_malloc(uint32 size,uint32 align_bytes)
 		return base_ptr;
 	}
 	assert(align_bytes <= 0xFF);
-	assert((align_bytes & align_bytes - 1) == 0);
+	assert((align_bytes & (align_bytes - 1)) == 0);
 
-	part_bytes = align_bytes - ((uint32)base_ptr) & (align_bytes - 1);
+	part_bytes = align_bytes - (((uint64)base_ptr) & (align_bytes - 1));
 	if (part_bytes == 0) {
 		part_bytes = align_bytes;
 	}

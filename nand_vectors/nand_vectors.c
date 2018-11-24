@@ -53,7 +53,7 @@ void nand_vector_pool_init_onetime(void)
 nand_vector_t* nand_allcoate_vector(uint32 want_nr, uint32 *result_nr)
 {
     nand_vector_t* pnand_vector = NULL;
-    assert(gnand_mgr.vector_pool_mgr.node_sz = sizeof (nand_vector_t));
+    assert(gnand_mgr.vector_pool_mgr.node_sz == sizeof (nand_vector_t));
     pnand_vector = (nand_vector_t*)pool_allocate_nodes(&gnand_mgr.vector_pool_mgr, result_nr, want_nr);
     memset(((uint8*)pnand_vector + sizeof (pool_node_t)), 0, gnand_mgr.vector_pool_mgr.node_sz - sizeof (pool_node_t));
     return pnand_vector;

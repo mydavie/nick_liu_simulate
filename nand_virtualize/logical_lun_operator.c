@@ -269,7 +269,7 @@ void logical_lun_pool_init_onetime(void)
 logical_lun_t* logical_lun_allocate(uint32 want_nr, uint32 *result_nr)
 {
     logical_lun_t* plogical_lun = NULL;
-    assert(logical_lun_pool_mgr.node_sz = sizeof (logical_lun_t));
+    assert(logical_lun_pool_mgr.node_sz == sizeof (logical_lun_t));
     plogical_lun = (logical_lun_t*)pool_allocate_nodes(&logical_lun_pool_mgr, result_nr, want_nr);
     memset(((uint8*)plogical_lun + sizeof (pool_node_t)), 0, logical_lun_pool_mgr.node_sz - sizeof (pool_node_t));
     return plogical_lun;
@@ -278,7 +278,7 @@ logical_lun_t* logical_lun_allocate(uint32 want_nr, uint32 *result_nr)
 uint32 logical_lun_release(logical_lun_t* start, uint32 vector_cnt)
 {
     assert(vector_cnt);
-    assert(logical_lun_pool_mgr.node_sz = sizeof (logical_lun_t));
+    assert(logical_lun_pool_mgr.node_sz == sizeof (logical_lun_t));
     pool_release_nodes(&logical_lun_pool_mgr, (pool_node_t *)start, vector_cnt);
     return true;
 }

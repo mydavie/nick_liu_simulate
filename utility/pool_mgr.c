@@ -33,8 +33,8 @@ void pool_mgr(char* pool_id, pool_mgr_t *pool_mgr, uint32 node_size, void* pool_
         else {
             pool_node->node_next    = (pool_node_t*)((uint8 *)pool_node + node_size);
         }
-        printf("poolID %s pool_base 0x%x [node i %d nr %d size 0x%x]  node address 0x%x next 0x%x\n",
-                pool_mgr->pool_id, (uint32)pool_base, i , node_nr, node_size, (uint32)pool_node, (uint32)pool_node->node_next);
+        printf("poolID %s pool_base 0x%lx [node i %d nr %d size 0x%x]  node address 0x%lx next 0x%lx\n",
+                pool_mgr->pool_id, (uint64)pool_base, i , node_nr, node_size, (uint64)pool_node, (uint64)pool_node->node_next);
 
         pool_node               = pool_node->node_next;
     }
@@ -50,7 +50,7 @@ pool_node_t * pool_allocate_nodes(pool_mgr_t *pool_mgr, uint32 *got_nr, uint32 w
     {
         got_cnt++;
         pool_mgr->allocate_cnt++;
-        printf("pool allocated node 0x%x cnt %d from poolID %s\n", (uint32)cur_free_node, got_cnt, pool_mgr->pool_id);
+        printf("pool allocated node 0x%lx cnt %d from poolID %s\n", (uint64)cur_free_node, got_cnt, pool_mgr->pool_id);
         cur_free_node      =  cur_free_node->node_next;
 
         if ((got_cnt == want_nr) || (cur_free_node == NULL))
@@ -70,8 +70,8 @@ void pool_release_nodes(pool_mgr_t *pool_mgr, pool_node_t *push_start, uint32 cn
 	assert(pool_mgr->allocate_cnt >= cnt);
 	pool_mgr->allocate_cnt -= cnt;
 	push_end = push_start + pool_mgr->node_sz * (cnt - 1);
-    printf("pool release node start 0x%x end %d cnt %d to pool %s [t:%d a: %d]\n",
-    		(uint32)push_start, (uint32)push_end, cnt, pool_mgr->pool_id, pool_mgr->init_cnt, pool_mgr->allocate_cnt);
+    printf("pool release node start 0x%lx end 0x%lx cnt %d to pool %s [t:%d a: %d]\n",
+    		(uint64)push_start, (uint64)push_end, cnt, pool_mgr->pool_id, pool_mgr->init_cnt, pool_mgr->allocate_cnt);
     push_end->node_next = pool_mgr->node_free;
     pool_mgr->node_free = push_start;
 

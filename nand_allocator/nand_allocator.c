@@ -226,7 +226,6 @@ void nand_allocator_init(void)
 {
     logical_lun_reader_t logical_lun_reader;
     logical_lun_reader.plut = &user_lut;
-
 }
 //
 //logical_lun_t *nand_spb_sequential_allocate_logical_lun(spb_ptr_t *spb_ptr, uint32 want_au_nr, uint32 got_au_nr)

@@ -16,12 +16,12 @@ uint32 nand_info_init_onetime(nand_info_t *pnand_info)
     pnand_info->page_nr_per_block       = 1024;
     pnand_info->au_nr_per_page_width    = 4;
     pnand_info->bits_nr_per_cell        = 3;
-    assert(pnand_info->ch_nr    < MAX_CHANNEL_NR);
-    assert(pnand_info->ce_nr    < MAX_CE_PER_CHANNEL);
-    assert(pnand_info->block_nr_per_plane < MAX_BLOCK_PER_PLANE);
-    assert(pnand_info->lun_nr   < MAX_LUN_PER_CE);
-    assert(pnand_info->plane_nr_per_lun < MAX_PLANE_PER_LUN);
-    assert(pnand_info->page_nr_per_block  < MAX_PAGE_PER_BLOCK);
+    assert(pnand_info->ch_nr <= MAX_CHANNEL_NR);
+    assert(pnand_info->ce_nr <= MAX_CE_PER_CHANNEL);
+    assert(pnand_info->block_nr_per_plane <= MAX_BLOCK_PER_PLANE);
+    assert(pnand_info->lun_nr <= MAX_LUN_PER_CE);
+    assert(pnand_info->plane_nr_per_lun <= MAX_PLANE_PER_LUN);
+    assert(pnand_info->page_nr_per_block  <= MAX_PAGE_PER_BLOCK);
     pnand_info->au_nr_per_slc_plane         = pnand_info->page_nr_per_block * pnand_info->au_nr_per_page_width;
     pnand_info->au_nr_per_slc_lun           = pnand_info->au_nr_per_slc_plane * pnand_info->plane_nr_per_lun;
     pnand_info->au_nr_per_slc_plane_width   = pnand_info->au_nr_per_page_width;
@@ -73,15 +73,15 @@ void nand_init_onetime(void)
     nand_vector_pool_init_onetime();
 }
 
-
 uint32 write_nand_vector(nand_vector_t* pnand_vector)
 {
     monogodb_operator_t mongodb_operator;
     nand_vector_t  cur;
     memory_node_t *pbuf_node        = pnand_vector->buf_node;
-    cur.vector.phy_lun.value               = pnand_vector->vector.phy_lun.value;
+    assert(pnand_vector->simulator);
+    cur.vector.phy_lun.value        = pnand_vector->vector.phy_lun.value;
     mongodb_operator.chunk_size     = AU_SIZE;
-    mongodb_operator.gridfs         = pnand_vector->simulator_ptr;
+    mongodb_operator.gridfs         = pnand_vector->simulator;
 
     for (uint32 i = 0; i < pnand_vector->au_cnt; i++) {
         mongodb_operator.name           = ((uint64)cur.vector.phy_lun.value) << 32 | cur.vector.phy_lun_ptr.value;
@@ -110,13 +110,14 @@ uint32 read_nand_vector(nand_vector_t* pnand_vector)
 {
     monogodb_operator_t mongodb_operator;
     memory_node_t *pbuf_node        = pnand_vector->buf_node;
-    mongodb_operator.chunk_size		= AU_SIZE;
-    mongodb_operator.gridfs			= pnand_vector->simulator_ptr;
+    assert(pnand_vector->simulator);
+    mongodb_operator.chunk_size     = AU_SIZE;
+    mongodb_operator.gridfs         = pnand_vector->simulator;
 
     for (uint32 i = 0; i < pnand_vector->au_cnt; i++) {
-        mongodb_operator.name          	= ((uint64)pnand_vector->vector.phy_lun.value) << 32 | pnand_vector->vector.phy_lun_ptr.value;
-        mongodb_operator.buf			= pbuf_node->buf;
-        mongodb_operator.buf_offset     = 0;
+        mongodb_operator.name       = ((uint64)pnand_vector->vector.phy_lun.value) << 32 | pnand_vector->vector.phy_lun_ptr.value;
+        mongodb_operator.buf        = pbuf_node->buf;
+        mongodb_operator.buf_offset = 0;
         assert(pbuf_node->buf);
         printf("read nand vector: %16lx >> plun %d plane %d block %d page %d au_off %d buffer %lx\n",
                     mongodb_operator.name,
@@ -125,7 +126,7 @@ uint32 read_nand_vector(nand_vector_t* pnand_vector)
                     pnand_vector->vector.phy_lun_ptr.field.block,
                     pnand_vector->vector.phy_lun_ptr.field.page,
                     pnand_vector->vector.phy_lun_ptr.field.au_off,
-      				(uint64)(mongodb_operator.buf));
+                    (uint64)(mongodb_operator.buf));
         mongodb_read_au(&mongodb_operator);
         assert(pnand_vector->vector.phy_lun_ptr.field.au_off < AU_NR_PER_PAGE);
         pnand_vector->vector.phy_lun_ptr.field.au_off += 1;

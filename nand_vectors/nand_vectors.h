@@ -90,7 +90,7 @@ typedef struct _nand_vector_t
     void                *logcial_lun;
     vector_t            vector;
     uint16              au_cnt;
-    void                *simulator_ptr;
+    void                *simulator;
     memory_node_t       *buf_node;
 }nand_vector_t;
 typedef struct _nand_vector_operator_t

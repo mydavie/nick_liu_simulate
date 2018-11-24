@@ -64,6 +64,7 @@ uint32 fill_nand_vectors(logical_lun_t *plogical_lun, nand_vector_t* pnand_vecto
     uint32 buf_offset               = 0;
     memory_node_t *pbuf_node        = plogical_lun->buf_node;
     uint32 au_nr_per_plane_width    = (plogical_lun->llun_nand_type == SLC_OTF_TYPE) ? au_nr_per_page_width : (au_nr_per_page_width * pnand_info->bits_nr_per_cell);
+    assert(plogical_lun->simulator);
 
     //to split one au range of current logical lun to different plane based(this will modified based on the ASIC design)
     if (au_of_start) {
@@ -204,10 +205,10 @@ uint32 write_logical_lun(logical_lun_t *plogical_lun)
 {
     nand_vector_t *cur      = plogical_lun->nand_vector;
     uint32 vector_cnt       = plogical_lun->vector_cnt;
-    mongoc_gridfs_t *gridfs = plogical_lun->gridfs;
+    void *simulator         = plogical_lun->simulator;
 
     for (uint32 i = 0; i < vector_cnt; i++) {
-        cur->simulator_ptr = gridfs;
+        cur->simulator = simulator;
         write_nand_vector(cur);
         cur = (nand_vector_t *)cur->next;
     }
@@ -216,12 +217,12 @@ uint32 write_logical_lun(logical_lun_t *plogical_lun)
 
 uint32 read_logical_lun(logical_lun_t *plogical_lun)
 {
-    nand_vector_t *cur      = plogical_lun->nand_vector;
-    uint32 vector_cnt       = plogical_lun->vector_cnt;
-    mongoc_gridfs_t *gridfs = plogical_lun->gridfs;
+    nand_vector_t *cur  = plogical_lun->nand_vector;
+    uint32 vector_cnt   = plogical_lun->vector_cnt;
+    void *simulator     = plogical_lun->simulator;
 
     for (uint32 i = 0; i < vector_cnt; i++) {
-        cur->simulator_ptr = gridfs;
+        cur->simulator = simulator;
         read_nand_vector(cur);
         cur = (nand_vector_t *)cur->next;
     }
@@ -230,9 +231,9 @@ uint32 read_logical_lun(logical_lun_t *plogical_lun)
 
 uint32 submit_logical_lun_operator(logical_lun_operator_t *plogcial_lun_operator)
 {
-    uint32 logical_lun_cnt	= plogcial_lun_operator->cnt;
-    logical_lun_t *cur		= plogcial_lun_operator->list;
-    mongoc_gridfs_t *gridfs	= plogcial_lun_operator->gridfs;
+    uint32 logical_lun_cnt  = plogcial_lun_operator->cnt;
+    logical_lun_t *cur      = plogcial_lun_operator->list;
+    void *simulator         = plogcial_lun_operator->simulator;
     if (cur)
     {
         logical_lun_list_to_vectors(cur, logical_lun_cnt);
@@ -245,8 +246,9 @@ uint32 submit_logical_lun_operator(logical_lun_operator_t *plogcial_lun_operator
         cur = &plogcial_lun_operator->start;
         assert(logical_lun_cnt == 1);
     }
+
     for (uint32 i = 0; i < logical_lun_cnt; i++) {
-        cur->gridfs = gridfs;
+        cur->simulator = simulator;
         if (plogcial_lun_operator->op_type == LOGICAL_LUN_OP_TYPE_PROGRAM) {
             write_logical_lun(cur);
         }

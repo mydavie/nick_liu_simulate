@@ -10,7 +10,7 @@ void logical_lun_operator_self_test(mongoc_gridfs_t *gridfs)
     uint32 want_nr = 1;
     uint32 result_nr = 0;
     logical_lun_t* plogical_lun = logical_lun_allocate(want_nr, &result_nr);
-    logical_lun_operator.gridfs = gridfs;
+    logical_lun_operator.simulator = gridfs;
 
     if (want_nr == result_nr) {
         logical_lun_operator.list               = plogical_lun;
@@ -25,7 +25,7 @@ void logical_lun_operator_self_test(mongoc_gridfs_t *gridfs)
         plogical_lun->llun_nand_type            = NATIVE_TYPE;
         plogical_lun->logical_lun_id            = 4;
         plogical_lun->llun_spb_id               = 34;
-        plogical_lun->gridfs                    = gridfs;
+        plogical_lun->simulator                 = gridfs;
         plogical_lun->au_param_type             = LOGICAL_LUN_PARAM_RANGE;
         submit_logical_lun_operator(&logical_lun_operator);
         logical_lun_operator.op_type        = LOGICAL_LUN_OP_TYPE_READ;

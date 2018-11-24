@@ -1,43 +1,14 @@
 #include "../lib_header.h"
 #include "../nand_vectors/nand_vectors.h"
 #include "../nand_virtualize/logical_lun_operator.h"
+#include "nand_allocator.h"
 
 typedef uint16 spb_id_t ;
-
-typedef struct _paa_t
-{
-    uint64  spb_id          : MAX_BLOCK_PER_PLANE_BITS;
-    uint64  logical_lun_id  : MAX_LLUN_NR_BITS;
-    uint64  au_ptr_of_lun   : MAX_AU_PER_LUN_BITS;
-    uint64  rsvd            : (64 - MAX_BLOCK_PER_PLANE_BITS - MAX_AU_PER_LUN_BITS - MAX_LLUN_NR_BITS);
-}paa_t;
-
-typedef struct _lut_t
-{
-    paa_t paa[100];
-    uint32 lut_size;
-    uint32 paa_cnt;
-}lut_t;
 
 lut_t user_lut;
 lut_t sys0_lut;
 lut_t sys1_lut;
-
-typedef struct _spb_info_t
-{
-	uint8 	pb_type : MAX_CELL_BITS;
-	uint16 	erase_cnt;
-	uint32 	read_disturb_cnt;
-	uint8 	defect_plane_map[MAX_LLUN_NR];
-}spb_info_t;
-
-//typedef struct _spb_ptr_t
-//{
-//	spb_id_t	spb_id;
-//	uint8		lun_ptr_of_spb;
-//	uint16		wordline_ptr_of_block[MAX_LLUN_NR];
-//	uint8 		au_ptr_of_lun[MAX_LLUN_NR];
-//}spb_ptr_t;
+paa_t l2p_table[100];
 
 spb_info_t gspb_info[MAX_BLOCK_PER_PLANE];
 
@@ -51,53 +22,47 @@ uint32 is_bit_set(uint32 map, uint32 bit_idx)
 	return (map & (1UL << bit_idx));
 }
 
-paa_t l2p_table[100];
-
-typedef struct _logical_lun_reader_t
-{
-    paa_t                   paa_ptr[MAX_LLUN_NR];
-    uint64                  laa_start;
-    uint16                  laa_cnt;
-    logical_lun_operator_t  logcial_lun_operator;
-    lut_t                   *plut;
-}logical_lun_reader_t;
-
-typedef struct _logcial_lun_writer_t
-{
-    paa_t   paa_ptr[MAX_LLUN_NR];
-    uint64  laa_start;
-    uint16  laa_cnt;
-    uint16  current_logical_lun_id;
-    logical_lun_operator_t logcial_lun_operator;
-}logical_lun_writer_t;
-
-void update_lut_by_logical_lun(lut_t *lut, logical_lun_t *plogical_lun, uint32 laa)
+void update_lut_by_logical_lun(lut_t *plut, logical_lun_t *plogical_lun)
 {
     paa_t paa;
+    uint32 laa_cnt      = plogical_lun->laa_cnt;
+    uint64 laa_start    = plogical_lun->laa_start;
     paa.logical_lun_id = plogical_lun->logical_lun_id;
     for (uint32 i = 0; i < MAX_PLANE_PER_LUN; i++) {
        if (plogical_lun->au_param.range.au_cnt[i] == 0) {
            continue;
        }
-       for (uint32 j = 0; j < plogical_lun->au_param.range.au_cnt[i]; i++) {
-           paa.au_ptr_of_lun    = plogical_lun->au_param.range.au_start[i]+j;
-           lut->paa[laa++]      = paa;
+       for (uint32 j = 0; j < plogical_lun->au_param.range.au_cnt[i]; j++) {
+           paa.au_ptr_of_lun = plogical_lun->au_param.range.au_start[i]+j;
+           plut->paa[laa_start++] = paa;
+           laa_cnt--;
        }
     }
+    assert(laa_cnt == 0);
 }
 
-void insert_logical_lun_to_operator(logical_lun_operator_t *plogcial_lun_operator,  logical_lun_t *plogical_lun_insert)
+void update_lut_by_logical_lun_operator(lut_t *plut, logical_lun_operator_t *plogcial_lun_operator)
 {
     logical_lun_t *plogical_lun = plogcial_lun_operator->list;
+
+    for (uint32 i = 0; i < plogcial_lun_operator->cnt; i++) {
+        update_lut_by_logical_lun(plut, plogical_lun);
+        plogical_lun = (logical_lun_t *)plogical_lun->next;
+    }
+}
+void insert_logical_lun_to_operator(logical_lun_operator_t *plogcial_lun_operator,  logical_lun_t *plogical_lun_insert)
+{
     if (plogcial_lun_operator->cnt == 0) {
-        plogcial_lun_operator->list = plogical_lun;
+        plogcial_lun_operator->list = plogical_lun_insert;
     }
     else {
+        logical_lun_t *plogical_lun = plogcial_lun_operator->list;
         for (uint32 i = 0; i < plogcial_lun_operator->cnt - 1; i++) {
            plogical_lun = (logical_lun_t *)plogical_lun->next;
         }
         plogical_lun->next = (pool_node_t*)plogical_lun_insert;
     }
+    plogical_lun_insert->simulator = plogcial_lun_operator->simulator;
     plogcial_lun_operator->cnt++;
 }
 
@@ -131,9 +96,9 @@ logical_lun_t *nand_spb_allocate(paa_t *paa, uint32 want_nr, uint32 *got_nr)
     uint32 plane_ptr_of_lun_width   = paa->au_ptr_of_lun / au_nr_per_plane_width;
     logical_lun_t* plogical_lun     = logical_lun_allocate(1, &result_nr);
     //for slc block, the page is the minimal program unit,and tlc block, the word line is minimal program unit.
-    assert(paa->au_ptr_of_lun % au_nr_per_plane_width);
+    assert(paa->au_ptr_of_lun % au_nr_per_plane_width == 0);
     assert(want_nr % au_nr_per_plane_width == 0);
-
+    plogical_lun->llun_nand_type = pspb_info->pb_type;
     plogical_lun->au_param.range.au_start[plane_ptr_of_lun_width] = paa->au_ptr_of_lun;
     do {
         if (is_bit_set(pspb_info->defect_plane_map[plane_ptr_of_lun_width], plane_ptr_of_lun_width))
@@ -147,9 +112,9 @@ logical_lun_t *nand_spb_allocate(paa_t *paa, uint32 want_nr, uint32 *got_nr)
             plogical_lun->au_param.range.au_cnt[plane_ptr_of_lun_width]     = au_nr_per_plane_width;
             paa->au_ptr_of_lun += plogical_lun->au_param.range.au_cnt[plane_ptr_of_lun_width];
         }
-        plane_ptr_of_lun_width++;
         want_nr -= plogical_lun->au_param.range.au_cnt[plane_ptr_of_lun_width];
         *got_nr  += plogical_lun->au_param.range.au_cnt[plane_ptr_of_lun_width];
+        plane_ptr_of_lun_width++;
     } while ((plane_ptr_of_lun_width < MAX_PLANE_PER_LUN) && want_nr);
 
     return plogical_lun;
@@ -158,21 +123,33 @@ logical_lun_t *nand_spb_allocate(paa_t *paa, uint32 want_nr, uint32 *got_nr)
 void laa_range_write(logical_lun_writer_t *logical_lun_writer)
 {
     uint32 got_nr;
-    uint32 want_nr = logical_lun_writer->laa_cnt;
-    uint32 cur_llun_id = logical_lun_writer->current_logical_lun_id;
+    uint64 laa_start    = logical_lun_writer->laa_start;
+    uint32 want_nr      = logical_lun_writer->laa_cnt;
+    uint32 cur_llun_id  = logical_lun_writer->current_logical_lun_id;
+    logical_lun_operator_t *plogical_lun_operator = &logical_lun_writer->logcial_lun_operator;
 
+    logical_lun_writer->logcial_lun_operator.op_type = LOGICAL_LUN_OP_TYPE_PROGRAM;
     //laa range translate into logical lun list, and translate to different none busy lun to best the performance later.
     do {
+        got_nr = 0;
         logical_lun_t *plogical_lun = nand_spb_allocate(&logical_lun_writer->paa_ptr[cur_llun_id], want_nr, &got_nr);
-        insert_logical_lun_to_operator(&logical_lun_writer->logcial_lun_operator, plogical_lun);
+        plogical_lun->laa_start     = laa_start;
+        plogical_lun->laa_cnt       = got_nr;
+        insert_logical_lun_to_operator(plogical_lun_operator, plogical_lun);
         //the following is sequential allocate. and the random allocate will find the idle lun to serve the allocator.
         cur_llun_id++;
         if (cur_llun_id == MAX_LLUN_NR) {
             cur_llun_id = 0;
         }
-        want_nr -= got_nr;
+        want_nr     -= got_nr;
+        laa_start   += got_nr;
     } while (want_nr);
+    assert(laa_start == logical_lun_writer->laa_start + logical_lun_writer->laa_cnt);
     logical_lun_writer->current_logical_lun_id = cur_llun_id;
+
+    //submit_logical_lun_operator(plogical_lun_operator);
+    update_lut_by_logical_lun_operator(logical_lun_writer->plut, plogical_lun_operator);
+    logical_lun_release(plogical_lun_operator->list, plogical_lun_operator->cnt);
 }
 
 /*any range laa, it should be split into different logical lun, either sequential or scatter.
@@ -241,11 +218,15 @@ void laa_range_read(logical_lun_reader_t *logical_lun_reader){
         }
     }
 }
-
-void test(void)
+lut_t *get_lut_ptr(uint32 user_type)
+{
+    return &user_lut;
+}
+void nand_allocator_init(void)
 {
     logical_lun_reader_t logical_lun_reader;
     logical_lun_reader.plut = &user_lut;
+
 }
 //
 //logical_lun_t *nand_spb_sequential_allocate_logical_lun(spb_ptr_t *spb_ptr, uint32 want_au_nr, uint32 got_au_nr)

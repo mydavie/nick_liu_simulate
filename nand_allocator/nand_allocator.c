@@ -105,7 +105,7 @@ logical_lun_t *nand_spb_allocate(paa_t *paa, uint32 want_nr, uint32 *got_nr)
         {
             plogical_lun->au_param.range.au_start[plane_ptr_of_lun_width]   = 0;
             plogical_lun->au_param.range.au_cnt[plane_ptr_of_lun_width]     = 0;
-            paa->au_ptr_of_lun += au_nr_per_lun_width;
+            paa->au_ptr_of_lun += au_nr_per_plane_width;
         }
         else {
             plogical_lun->au_param.range.au_start[plane_ptr_of_lun_width]   = paa->au_ptr_of_lun;

@@ -66,10 +66,14 @@ pool_node_t * pool_allocate_nodes(pool_mgr_t *pool_mgr, uint32 *got_nr, uint32 w
 
 void pool_release_nodes(pool_mgr_t *pool_mgr, pool_node_t *push_start, uint32 cnt)
 {
-	pool_node_t *push_end = NULL;
-	assert(pool_mgr->allocate_cnt >= cnt);
-	pool_mgr->allocate_cnt -= cnt;
-	push_end = push_start + pool_mgr->node_sz * (cnt - 1);
+    pool_node_t *push_end = NULL;
+    assert(pool_mgr->allocate_cnt >= cnt);
+    pool_mgr->allocate_cnt -= cnt;
+    push_end = push_start;
+    while (--cnt)
+    {
+        push_end = push_end->node_next;
+    }
     printf("pool release node start 0x%lx end 0x%lx cnt %d to pool %s [t:%d a: %d]\n",
     		(uint64)push_start, (uint64)push_end, cnt, pool_mgr->pool_id, pool_mgr->init_cnt, pool_mgr->allocate_cnt);
     push_end->node_next = pool_mgr->node_free;
